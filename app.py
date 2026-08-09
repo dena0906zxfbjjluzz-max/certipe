@@ -318,16 +318,16 @@ def inject_web_look() -> None:
           box-shadow: 0 18px 50px rgba(20, 33, 28, 0.08);
         }
 
-        /* ── Campos de datos bien visibles ── */
+        /* ── Campos de datos = mismo verde medio del key-box (inicio) ── */
         [data-testid="stTextInput"] input,
         [data-testid="stTextArea"] textarea,
         [data-testid="stNumberInput"] input,
         .stTextInput input,
         .stTextArea textarea,
         .stNumberInput input {
-          background-color: #f7faf8 !important;
+          background-color: #e9efeb !important;
           color: #14211c !important;
-          border: 2px solid #3d5249 !important;
+          border: 1.5px solid #c9d5cc !important;
           border-radius: 10px !important;
           min-height: 2.75rem !important;
           padding: 0.55rem 0.8rem !important;
@@ -350,13 +350,13 @@ def inject_web_look() -> None:
         div[data-baseweb="base-input"],
         div[data-baseweb="textarea"],
         div[data-baseweb="textarea"] > div {
-          background-color: #f7faf8 !important;
-          border: 2px solid #3d5249 !important;
+          background-color: #e9efeb !important;
+          border: 1.5px solid #c9d5cc !important;
           border-radius: 10px !important;
           outline: none !important;
         }
 
-        /* Focus: borde verde fuerte */
+        /* Focus: un poco más claro + borde verde acento */
         [data-testid="stTextInput"] input:focus,
         [data-testid="stTextArea"] textarea:focus,
         [data-testid="stNumberInput"] input:focus,
@@ -370,20 +370,16 @@ def inject_web_look() -> None:
         div[data-baseweb="base-input"]:focus-within,
         div[data-baseweb="textarea"] > div:focus-within {
           border-color: #0d6e56 !important;
-          box-shadow: 0 0 0 3px rgba(13, 110, 86, 0.22) !important;
-          background-color: #ffffff !important;
+          box-shadow: 0 0 0 3px rgba(13, 110, 86, 0.18) !important;
+          background-color: #e9efeb !important;
         }
 
-        /* Quitar borde invisible / gris interno de Streamlit */
-        [data-testid="stTextInput"] *,
-        [data-testid="stTextArea"] *,
-        [data-testid="stNumberInput"] * {
-          border-color: inherit;
-        }
+        /* Quitar borde gris interno de Streamlit; el fondo verde lo lleva el contenedor */
         [data-testid="stTextInput"] div[data-baseweb="base-input"] input,
-        [data-testid="stTextArea"] div[data-baseweb="base-input"] textarea {
+        [data-testid="stTextArea"] div[data-baseweb="base-input"] textarea,
+        [data-testid="stNumberInput"] div[data-baseweb="base-input"] input {
           border: none !important;
-          background: transparent !important;
+          background-color: #e9efeb !important;
         }
 
         code, .stCode code {
