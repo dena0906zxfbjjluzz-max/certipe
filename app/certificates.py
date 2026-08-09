@@ -49,6 +49,8 @@ def issue(
     course_hours: int | None = None,
     issued_by: str | None = None,
     notes: str | None = None,
+    grade: str | None = None,
+    city: str | None = None,
 ) -> dict[str, Any]:
     crypto.ensure_keys()
     cert_id = _new_id()
@@ -75,8 +77,11 @@ def issue(
     pub = crypto.public_key_b64()
     digest = crypto.payload_hash(payload)
 
+    # grade/city solo visual (PDF); no entran al payload firmado
     record = {
         **payload,
+        "grade": (grade or "").strip() or None,
+        "city": (city or "").strip() or None,
         "signature": signature,
         "public_key": pub,
         "payload_hash": digest,

@@ -681,12 +681,18 @@ elif page == "emitir":
         unsafe_allow_html=True,
     )
     with st.form("emitir"):
-        holder_name = st.text_input("Nombre del titulado", placeholder="Ana López")
+        holder_name = st.text_input("Nombre del titulado", placeholder="Denilson Aurely Padilla Arevalo")
         holder_doc = st.text_input("Documento (DNI / CE)", placeholder="12345678")
-        course_title = st.text_input("Curso / programa", placeholder="Introducción a Python")
-        course_hours = st.number_input("Horas (opcional)", min_value=0, max_value=10000, value=0)
+        course_title = st.text_input("Curso / programa", placeholder="Power Bi desde cero")
+        course_hours = st.number_input("Horas (opcional)", min_value=0, max_value=10000, value=32)
+        grade = st.text_input("Nota / calificación (opcional)", placeholder="16 (Dieciséis)")
+        city = st.text_input("Ciudad de emisión (opcional)", placeholder="Trujillo")
         issued_by = st.text_input("Firmado por (opcional)", placeholder="Director académico")
-        notes = st.text_area("Notas (opcional)", height=70)
+        notes = st.text_area(
+            "Detalle extra (opcional)",
+            height=70,
+            placeholder="Ej. Desarrollado del 14 de mayo al 9 de junio de 2026",
+        )
         submitted = st.form_submit_button("Firmar y emitir", type="primary", use_container_width=True)
         if submitted:
             if not holder_name.strip() or not holder_doc.strip() or not course_title.strip():
@@ -699,6 +705,8 @@ elif page == "emitir":
                     course_hours=int(course_hours) or None,
                     issued_by=issued_by or None,
                     notes=notes or None,
+                    grade=grade or None,
+                    city=city or None,
                 )
                 st.session_state["last_cert"] = rec
                 st.session_state["supabase_ok"] = False
