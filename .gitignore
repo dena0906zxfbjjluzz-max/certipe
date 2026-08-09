@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.streamlit/secrets.toml
+keys/*.pem
+keys/*.key
+keys/*.hex
+data/*.json
+!data/.gitkeep
+*.pyc
+.DS_Store
+.agents/

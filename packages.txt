@@ -1,0 +1,2 @@
+# Dependencias de sistema para Streamlit Cloud (opcional).
+# OpenSSL ya viene en la imagen; se deja vacío o mínimo.
