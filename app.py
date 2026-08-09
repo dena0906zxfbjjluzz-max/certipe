@@ -521,7 +521,9 @@ def inject_web_look() -> None:
 
         /* Botones Streamlit → acento web */
         div.stButton > button[kind="primary"],
-        div.stButton > button[data-testid="baseButton-primary"] {
+        div.stButton > button[data-testid="baseButton-primary"],
+        div[data-testid="stFormSubmitButton"] > button,
+        div[data-testid="stFormSubmitButton"] button {
           background-color: #0d6e56 !important;
           border-color: #0d6e56 !important;
           color: #fff !important;
@@ -857,19 +859,31 @@ if (
             st.session_state["page"] = "inicio"
             st.rerun()
 
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
     if err_creds:
         st.error(err_creds)
-    with st.form("login"):
-        u = st.text_input("Usuario")
-        p = st.text_input("Clave", type="password")
-        if st.form_submit_button("Entrar", type="primary", use_container_width=True):
-            if u.strip() == usuario_cfg and p == clave_cfg:
-                st.session_state["autenticado"] = True
-                st.session_state["page"] = "emitir"
-                st.rerun()
-            st.error("Usuario o clave incorrectos.")
-    st.markdown("</div>", unsafe_allow_html=True)
+
+    # st.form nativo (sin divs HTML rotos) → Enter en Usuario/Clave envía "Entrar"
+    with st.form("login", clear_on_submit=False, border=False):
+        st.markdown("##### Acceso")
+        u = st.text_input("Usuario", key="login_usuario", autocomplete="username")
+        p = st.text_input(
+            "Clave",
+            type="password",
+            key="login_clave",
+            autocomplete="current-password",
+        )
+        entrar = st.form_submit_button(
+            "Entrar",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if entrar:
+        if u.strip() == usuario_cfg and p == clave_cfg:
+            st.session_state["autenticado"] = True
+            st.session_state["page"] = "emitir"
+            st.rerun()
+        st.error("Usuario o clave incorrectos.")
     foot()
     st.stop()
 
@@ -920,18 +934,25 @@ elif page in {"validar", "validar_publico"}:
         f"""
         <p class="eyebrow">{certificates.institution_name()}</p>
         <h1 class="hero-title">Validar certificado</h1>
-        <p class="lead">Ingresa el código (ej. CERT-XXXX-XXXX-XXXX).</p>
+        <p class="lead">Ingresa el código (ej. CERT-XXXX-XXXX-XXXX) y pulsa Enter o Verificar.</p>
         """,
         unsafe_allow_html=True,
     )
-    codigo = st.text_input("Código", placeholder="CERT-....", label_visibility="collapsed")
-    colv1, colv2 = st.columns(2)
-    with colv1:
-        go = st.button("Verificar firma", type="primary", use_container_width=True)
-    with colv2:
-        if st.button("← Inicio", type="secondary", use_container_width=True):
-            st.session_state["page"] = "inicio"
-            st.rerun()
+    with st.form("validar_codigo", clear_on_submit=False, border=False):
+        codigo = st.text_input(
+            "Código",
+            placeholder="CERT-....",
+            label_visibility="collapsed",
+            key="validar_codigo_input",
+        )
+        go = st.form_submit_button(
+            "Verificar firma",
+            type="primary",
+            use_container_width=True,
+        )
+    if st.button("← Inicio", type="secondary", use_container_width=True):
+        st.session_state["page"] = "inicio"
+        st.rerun()
     if go and codigo.strip():
         show_result_panel(
             certificates.validate(codigo.strip().upper()),
