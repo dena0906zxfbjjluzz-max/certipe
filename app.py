@@ -246,92 +246,99 @@ def exportar_lista_csv(filas: list[dict]) -> bytes:
 
 
 def exportar_lista_excel(filas: list[dict]) -> bytes:
-    """Genera .xlsx sin dependencias extra (SpreadsheetML empaquetado)."""
-    import zipfile
-    from xml.sax.saxutils import escape
+    """
+    Excel nativo (.xlsx) estilo packing list industrial:
+    título azul oscuro, cabeceras azul medio, bordes y auto-ancho.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
 
-    campos = [
-        "Fecha",
-        "DNI",
-        "Nombre del Alumno",
-        "Curso",
-        "Código de Verificación",
+    # Claves del dict de filas vs títulos de columna en el archivo
+    columnas = [
+        ("Fecha", "Fecha"),
+        ("DNI", "DNI"),
+        ("Nombre del Alumno", "Alumno"),
+        ("Curso", "Curso"),
+        ("Código de Verificación", "Código"),
     ]
+    n_cols = len(columnas)
 
-    def cell_inline(ref: str, value: str) -> str:
-        return (
-            f'<c r="{ref}" t="inlineStr"><is><t>{escape(str(value))}</t></is></c>'
-        )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Certificados"
 
-    def col_letter(n: int) -> str:
-        # 1 -> A
-        s = ""
-        while n:
-            n, r = divmod(n - 1, 26)
-            s = chr(65 + r) + s
-        return s
+    # Paleta packing list
+    fill_title = PatternFill("solid", fgColor="1F4E79")
+    fill_header = PatternFill("solid", fgColor="2E75B6")
+    fill_zebra = PatternFill("solid", fgColor="F2F2F2")
+    font_title = Font(name="Calibri", bold=True, color="FFFFFF", size=14)
+    font_header = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
+    font_cell = Font(name="Calibri", color="000000", size=10)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    thin = Side(style="thin", color="B0B0B0")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    sheet_rows: list[str] = []
-    # header
-    header_cells = "".join(
-        cell_inline(f"{col_letter(i + 1)}1", h) for i, h in enumerate(campos)
+    # Fila 1: título merged
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_cols)
+    title_cell = ws.cell(
+        row=1,
+        column=1,
+        value="Registro de Certificados Emitidos | CertiPE",
     )
-    sheet_rows.append(f'<row r="1">{header_cells}</row>')
-    for ri, fila in enumerate(filas, start=2):
-        cells = "".join(
-            cell_inline(f"{col_letter(ci + 1)}{ri}", fila.get(campo, ""))
-            for ci, campo in enumerate(campos)
-        )
-        sheet_rows.append(f'<row r="{ri}">{cells}</row>')
+    title_cell.fill = fill_title
+    title_cell.font = font_title
+    title_cell.alignment = center
+    for col in range(1, n_cols + 1):
+        c = ws.cell(row=1, column=col)
+        c.fill = fill_title
+        c.border = border
+    ws.row_dimensions[1].height = 28
 
-    sheet_xml = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        f'<sheetData>{"".join(sheet_rows)}</sheetData>'
-        "</worksheet>"
-    )
-    content_types = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-        '<Default Extension="xml" ContentType="application/xml"/>'
-        '<Override PartName="/xl/workbook.xml" '
-        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-        '<Override PartName="/xl/worksheets/sheet1.xml" '
-        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-        "</Types>"
-    )
-    rels = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rId1" '
-        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
-        'Target="xl/workbook.xml"/>'
-        "</Relationships>"
-    )
-    wb_rels = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rId1" '
-        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
-        'Target="worksheets/sheet1.xml"/>'
-        "</Relationships>"
-    )
-    workbook = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
-        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-        '<sheets><sheet name="Alumnos" sheetId="1" r:id="rId1"/></sheets>'
-        "</workbook>"
-    )
+    # Fila 2: cabeceras
+    for col_idx, (_key, label) in enumerate(columnas, start=1):
+        cell = ws.cell(row=2, column=col_idx, value=label)
+        cell.fill = fill_header
+        cell.font = font_header
+        cell.alignment = center
+        cell.border = border
+    ws.row_dimensions[2].height = 20
+    ws.freeze_panes = "A3"
+
+    # Datos desde fila 3
+    for row_idx, fila in enumerate(filas, start=3):
+        for col_idx, (key, _label) in enumerate(columnas, start=1):
+            val = fila.get(key, "")
+            if val is None:
+                val = ""
+            cell = ws.cell(row=row_idx, column=col_idx, value=str(val))
+            cell.font = font_cell
+            cell.border = border
+            cell.alignment = center if col_idx in (1, 2) else left
+            if (row_idx - 3) % 2 == 1:
+                cell.fill = fill_zebra
+
+    # Auto-fit de columnas (aprox. openpyxl; márgenes para no cortar)
+    for col_idx, (key, label) in enumerate(columnas, start=1):
+        max_len = len(str(label))
+        for row_idx in range(3, 3 + len(filas)):
+            val = ws.cell(row=row_idx, column=col_idx).value
+            if val is not None:
+                max_len = max(max_len, len(str(val)))
+        # Límites sensatos (hash largo vs. texto legible)
+        width = min(max(max_len + 3, 12), 55 if col_idx != 5 else 70)
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    # Impresión limpia
+    ws.print_title_rows = "1:2"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
 
     out = io.BytesIO()
-    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("[Content_Types].xml", content_types)
-        zf.writestr("_rels/.rels", rels)
-        zf.writestr("xl/workbook.xml", workbook)
-        zf.writestr("xl/_rels/workbook.xml.rels", wb_rels)
-        zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+    wb.save(out)
     return out.getvalue()
 
 
