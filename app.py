@@ -265,42 +265,75 @@ def inject_web_look() -> None:
           padding: 1rem 1.1rem 0.4rem;
           box-shadow: 0 18px 50px rgba(20, 33, 28, 0.08);
         }
-        /* Inputs más visibles (borde + fondo blanco) — solo cajas del form */
-        div[data-testid="stForm"] div[data-baseweb="input"] > div,
-        div[data-testid="stForm"] div[data-baseweb="base-input"],
-        div[data-testid="stForm"] div[data-baseweb="textarea"] > div,
-        div[data-testid="stForm"] .stNumberInput > div > div {
-          background-color: #ffffff !important;
-          border: 1.5px solid #a8b9b0 !important;
+
+        /* ── Campos de datos bien visibles ── */
+        [data-testid="stTextInput"] input,
+        [data-testid="stTextArea"] textarea,
+        [data-testid="stNumberInput"] input,
+        .stTextInput input,
+        .stTextArea textarea,
+        .stNumberInput input {
+          background-color: #f7faf8 !important;
+          color: #14211c !important;
+          border: 2px solid #3d5249 !important;
           border-radius: 10px !important;
+          min-height: 2.75rem !important;
+          padding: 0.55rem 0.8rem !important;
           box-shadow: none !important;
         }
-        div[data-testid="stForm"] div[data-baseweb="input"] > div:focus-within,
-        div[data-testid="stForm"] div[data-baseweb="base-input"]:focus-within,
-        div[data-testid="stForm"] div[data-baseweb="textarea"] > div:focus-within,
-        div[data-testid="stForm"] .stNumberInput > div > div:focus-within {
-          border-color: #0d6e56 !important;
-          box-shadow: 0 0 0 2px rgba(13, 110, 86, 0.18) !important;
+        [data-testid="stTextArea"] textarea,
+        .stTextArea textarea {
+          min-height: 5.5rem !important;
         }
-        div[data-testid="stForm"] input,
-        div[data-testid="stForm"] textarea {
-          color: #14211c !important;
-          background: transparent !important;
-        }
-        /* También inputs fuera de form (Validar, login) */
+
+        /* Contenedor BaseWeb (Streamlit envuelve el input) */
+        [data-testid="stTextInput"] [data-baseweb="base-input"],
+        [data-testid="stTextArea"] [data-baseweb="base-input"],
+        [data-testid="stNumberInput"] [data-baseweb="base-input"],
+        [data-testid="stTextInput"] > div > div,
+        [data-testid="stTextArea"] > div > div,
+        [data-testid="stNumberInput"] > div > div,
+        div[data-baseweb="input"],
         div[data-baseweb="input"] > div,
         div[data-baseweb="base-input"],
+        div[data-baseweb="textarea"],
         div[data-baseweb="textarea"] > div {
-          background-color: #ffffff !important;
-          border: 1.5px solid #a8b9b0 !important;
+          background-color: #f7faf8 !important;
+          border: 2px solid #3d5249 !important;
           border-radius: 10px !important;
+          outline: none !important;
         }
+
+        /* Focus: borde verde fuerte */
+        [data-testid="stTextInput"] input:focus,
+        [data-testid="stTextArea"] textarea:focus,
+        [data-testid="stNumberInput"] input:focus,
+        [data-testid="stTextInput"]:focus-within [data-baseweb="base-input"],
+        [data-testid="stTextArea"]:focus-within [data-baseweb="base-input"],
+        [data-testid="stNumberInput"]:focus-within [data-baseweb="base-input"],
+        [data-testid="stTextInput"]:focus-within > div > div,
+        [data-testid="stTextArea"]:focus-within > div > div,
+        div[data-baseweb="input"]:focus-within,
         div[data-baseweb="input"] > div:focus-within,
         div[data-baseweb="base-input"]:focus-within,
         div[data-baseweb="textarea"] > div:focus-within {
           border-color: #0d6e56 !important;
-          box-shadow: 0 0 0 2px rgba(13, 110, 86, 0.18) !important;
+          box-shadow: 0 0 0 3px rgba(13, 110, 86, 0.22) !important;
+          background-color: #ffffff !important;
         }
+
+        /* Quitar borde invisible / gris interno de Streamlit */
+        [data-testid="stTextInput"] *,
+        [data-testid="stTextArea"] *,
+        [data-testid="stNumberInput"] * {
+          border-color: inherit;
+        }
+        [data-testid="stTextInput"] div[data-baseweb="base-input"] input,
+        [data-testid="stTextArea"] div[data-baseweb="base-input"] textarea {
+          border: none !important;
+          background: transparent !important;
+        }
+
         code, .stCode code {
           font-family: "IBM Plex Mono", monospace !important;
         }
