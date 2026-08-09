@@ -4,5 +4,9 @@ build-backend = "maturin"
 
 [project]
 name = "motor_rust"
+version = "0.1.0"
 requires-python = ">=3.10"
 classifiers = ["Programming Language :: Rust", "Programming Language :: Python :: Implementation :: CPython"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]

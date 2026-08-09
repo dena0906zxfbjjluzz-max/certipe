@@ -1,0 +1,13 @@
+[package]
+name = "motor_rust"
+version = "0.1.0"
+edition = "2021"
+description = "Motor nativo Ed25519 (PyO3) para CertiPE"
+
+[lib]
+name = "motor_rust"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20", features = ["extension-module", "abi3-py310"] }
+ed25519-dalek = "2.1"

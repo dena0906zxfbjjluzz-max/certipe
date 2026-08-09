@@ -12,3 +12,6 @@ data/*.json
 *.pyc
 .DS_Store
 .agents/
+/target/
+*.so
+**.abi3.so
