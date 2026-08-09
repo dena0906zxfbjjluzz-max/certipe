@@ -265,6 +265,42 @@ def inject_web_look() -> None:
           padding: 1rem 1.1rem 0.4rem;
           box-shadow: 0 18px 50px rgba(20, 33, 28, 0.08);
         }
+        /* Inputs más visibles (borde + fondo blanco) — solo cajas del form */
+        div[data-testid="stForm"] div[data-baseweb="input"] > div,
+        div[data-testid="stForm"] div[data-baseweb="base-input"],
+        div[data-testid="stForm"] div[data-baseweb="textarea"] > div,
+        div[data-testid="stForm"] .stNumberInput > div > div {
+          background-color: #ffffff !important;
+          border: 1.5px solid #a8b9b0 !important;
+          border-radius: 10px !important;
+          box-shadow: none !important;
+        }
+        div[data-testid="stForm"] div[data-baseweb="input"] > div:focus-within,
+        div[data-testid="stForm"] div[data-baseweb="base-input"]:focus-within,
+        div[data-testid="stForm"] div[data-baseweb="textarea"] > div:focus-within,
+        div[data-testid="stForm"] .stNumberInput > div > div:focus-within {
+          border-color: #0d6e56 !important;
+          box-shadow: 0 0 0 2px rgba(13, 110, 86, 0.18) !important;
+        }
+        div[data-testid="stForm"] input,
+        div[data-testid="stForm"] textarea {
+          color: #14211c !important;
+          background: transparent !important;
+        }
+        /* También inputs fuera de form (Validar, login) */
+        div[data-baseweb="input"] > div,
+        div[data-baseweb="base-input"],
+        div[data-baseweb="textarea"] > div {
+          background-color: #ffffff !important;
+          border: 1.5px solid #a8b9b0 !important;
+          border-radius: 10px !important;
+        }
+        div[data-baseweb="input"] > div:focus-within,
+        div[data-baseweb="base-input"]:focus-within,
+        div[data-baseweb="textarea"] > div:focus-within {
+          border-color: #0d6e56 !important;
+          box-shadow: 0 0 0 2px rgba(13, 110, 86, 0.18) !important;
+        }
         code, .stCode code {
           font-family: "IBM Plex Mono", monospace !important;
         }
