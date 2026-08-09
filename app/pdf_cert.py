@@ -1,9 +1,8 @@
-"""PDF estilo certificado de extensión (layout TECSUP), con marca CertiPE."""
+"""Generación premium del certificado PDF (A4 horizontal) con ReportLab."""
 
 from __future__ import annotations
 
 import io
-import math
 import textwrap
 from datetime import datetime
 from typing import Any
@@ -15,14 +14,18 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 
-# Paleta cercana al certificado de referencia (cian / negro / gris)
-CYAN = (0.0, 0.68, 0.87)  # ~#00ADEF
-INK = (0.05, 0.05, 0.06)
-MUTED = (0.28, 0.3, 0.32)
-SOFT_LINE = (0.82, 0.85, 0.88)
+# Paleta premium
+NAVY = (0x0F / 255, 0x2C / 255, 0x59 / 255)  # #0F2C59
+GOLD = (0xC4 / 255, 0x9A / 255, 0x3C / 255)  # acento sobrio
+INK = (0.10, 0.12, 0.14)
+MUTED = (0.38, 0.40, 0.44)
+LINE = (0.78, 0.80, 0.84)
+
+# Márgenes A4 landscape
+MARGIN = 16 * mm
 
 
-def qr_png_bytes(url: str, box_size: int = 8) -> bytes:
+def qr_png_bytes(url: str, box_size: int = 6) -> bytes:
     img = qrcode.make(url, border=1, box_size=box_size)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -33,7 +36,7 @@ def _fmt_fecha(iso: str | None) -> str:
     if not iso:
         return ""
     try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
         meses = (
             "enero febrero marzo abril mayo junio "
             "julio agosto setiembre octubre noviembre diciembre"
@@ -43,207 +46,242 @@ def _fmt_fecha(iso: str | None) -> str:
         return str(iso)[:10]
 
 
-def _waves(c: canvas.Canvas, width: float, height: float) -> None:
-    """Fondo ondulante gris claro como el modelo de referencia."""
-    c.saveState()
-    c.setStrokeColorRGB(0.88, 0.9, 0.92)
-    c.setLineWidth(0.4)
-    for i in range(22):
-        y0 = 12 * mm + i * 8.5 * mm
-        p = c.beginPath()
-        p.moveTo(8 * mm, y0)
-        x = 8 * mm
-        while x < width - 8 * mm:
-            amp = 2.8 * mm
-            p.curveTo(
-                x + 10 * mm,
-                y0 + amp * math.sin((i + x) / 28),
-                x + 20 * mm,
-                y0 - amp * math.cos((i + x) / 35),
-                x + 30 * mm,
-                y0,
-            )
-            x += 30 * mm
-        c.drawPath(p, stroke=1, fill=0)
-    c.restoreState()
+def _draw_frame(c: canvas.Canvas, w: float, h: float) -> None:
+    """Marco doble limpio con margen premium."""
+    c.setStrokeColorRGB(*NAVY)
+    c.setLineWidth(1.8)
+    c.rect(MARGIN, MARGIN, w - 2 * MARGIN, h - 2 * MARGIN, stroke=1, fill=0)
+    c.setStrokeColorRGB(*LINE)
+    c.setLineWidth(0.5)
+    inset = 2.2 * mm
+    c.rect(
+        MARGIN + inset,
+        MARGIN + inset,
+        w - 2 * MARGIN - 2 * inset,
+        h - 2 * MARGIN - 2 * inset,
+        stroke=1,
+        fill=0,
+    )
 
 
-def _center(
+def _center_text(
     c: canvas.Canvas,
     text: str,
+    x_center: float,
     y: float,
-    width: float,
     *,
     font: str = "Helvetica",
-    size: int = 11,
+    size: float = 11,
+    color: tuple[float, float, float] = INK,
+    max_width_chars: int = 90,
     leading: float = 14,
-    max_chars: int = 100,
-    color: tuple[float, float, float] = MUTED,
 ) -> float:
+    """Escribe párrafo centrado y devuelve la Y inferior siguiente."""
     c.setFont(font, size)
     c.setFillColorRGB(*color)
-    for line in textwrap.wrap(text, width=max_chars) or [""]:
-        c.drawCentredString(width / 2, y, line)
+    lines = textwrap.wrap(text, width=max_width_chars) or [""]
+    for line in lines:
+        c.drawCentredString(x_center, y, line)
         y -= leading
     return y
 
 
-def build_certificate_pdf(cert: dict[str, Any], verify_url: str) -> bytes:
+def generar_pdf(cert: dict[str, Any], verify_url: str) -> bytes:
     """
-    Layout igual al modelo profesional:
-    header izq/der · CERTIFICADO · Otorgado a · texto · ciudad · QR + firma · URL pie.
+    Certificado profesional A4 horizontal.
+
+    Estructura (de arriba a abajo):
+      cabecera (marca + institución)
+      CERTIFICADO
+      Otorgado a / nombre
+      párrafo limpio de mérito
+      firma (centro-derecha)
+      QR (abajo izquierda, sin URL legible)
     """
     buf = io.BytesIO()
-    width, height = landscape(A4)
+    page_w, page_h = landscape(A4)
     c = canvas.Canvas(buf, pagesize=landscape(A4))
+    cx = page_w / 2
 
-    # Fondo blanco limpio + olas
+    # Fondo
     c.setFillColorRGB(1, 1, 1)
-    c.rect(0, 0, width, height, fill=1, stroke=0)
-    _waves(c, width, height)
+    c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
+    _draw_frame(c, page_w, page_h)
 
-    inst = str(cert.get("institution_name") or "Institución").strip()
-    slogan = str(
-        cert.get("institution_slogan") or "TECNOLOGÍA CON SENTIDO"
-    ).strip().upper()
-
-    # ——— Header: CertiPE (tipo CPE) | Institución (tipo Tecsup) ———
+    # ── Cabecera ──────────────────────────────────────────────
+    brand_y = page_h - MARGIN - 14 * mm
     c.setFillColorRGB(*INK)
-    c.setFont("Helvetica-Bold", 26)
-    c.drawString(20 * mm, height - 28 * mm, "CertiPE")
-    c.setFont("Helvetica", 8)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(MARGIN + 8 * mm, brand_y, "CertiPE")
+    c.setFont("Helvetica", 7.5)
     c.setFillColorRGB(*MUTED)
-    # dos líneas tipo "Cursos y Programa de Extensión"
-    c.drawString(52 * mm, height - 24 * mm, "Certificados y")
-    c.drawString(52 * mm, height - 28.5 * mm, "firma digital")
+    c.drawString(MARGIN + 8 * mm, brand_y - 4.5 * mm, "Certificados con firma digital")
 
-    # Marca de institución a la derecha (cian)
-    c.setFillColorRGB(*CYAN)
-    size_inst = 16 if len(inst) <= 18 else (12 if len(inst) <= 32 else 9)
+    inst = str(cert.get("institution_name") or "Academia Demo Perú").strip()
+    slogan = str(cert.get("institution_slogan") or "Formación con sentido").strip()
+    c.setFillColorRGB(*NAVY)
+    size_inst = 12 if len(inst) <= 28 else 9
     c.setFont("Helvetica-Bold", size_inst)
-    c.drawRightString(width - 20 * mm, height - 24 * mm, inst.upper()[:40])
+    c.drawRightString(page_w - MARGIN - 8 * mm, brand_y, inst.upper()[:42])
     c.setFont("Helvetica", 7)
-    c.setFillColorRGB(0.35, 0.55, 0.7)
-    c.drawRightString(width - 20 * mm, height - 30 * mm, slogan[:48])
+    c.setFillColorRGB(*MUTED)
+    c.drawRightString(page_w - MARGIN - 8 * mm, brand_y - 4.5 * mm, slogan.upper()[:48])
 
-    # ——— CERTIFICADO ———
-    c.setFillColorRGB(*CYAN)
-    c.setFont("Helvetica-Bold", 38)
-    c.drawCentredString(width / 2, height - 58 * mm, "CERTIFICADO")
+    # ── Título ────────────────────────────────────────────────
+    title_y = page_h - 58 * mm
+    c.setFillColorRGB(*NAVY)
+    c.setFont("Helvetica-Bold", 34)
+    c.drawCentredString(cx, title_y, "CERTIFICADO")
 
-    # Otorgado a
-    c.setFillColorRGB(*INK)
-    c.setFont("Helvetica", 12)
-    c.drawCentredString(width / 2, height - 76 * mm, "Otorgado a:")
+    # Acento dorado fino bajo el título
+    c.setStrokeColorRGB(*GOLD)
+    c.setLineWidth(1.2)
+    c.line(cx - 28 * mm, title_y - 4 * mm, cx + 28 * mm, title_y - 4 * mm)
+
+    # ── Otorgado a + nombre ───────────────────────────────────
+    c.setFillColorRGB(*MUTED)
+    c.setFont("Helvetica", 11)
+    c.drawCentredString(cx, title_y - 16 * mm, "Otorgado a:")
 
     name = str(cert.get("holder_name") or "—").strip()
-    name_size = 18 if len(name) < 40 else (14 if len(name) < 55 else 12)
+    name_y = title_y - 30 * mm
+    c.setFillColorRGB(*INK)
+    name_size = 24 if len(name) <= 36 else (18 if len(name) <= 50 else 14)
     c.setFont("Helvetica-Bold", name_size)
-    c.drawCentredString(width / 2, height - 88 * mm, name)
+    c.drawCentredString(cx, name_y, name)
 
+    # Línea decorativa bajo el nombre
+    c.setStrokeColorRGB(*LINE)
+    c.setLineWidth(0.7)
+    c.line(cx - 55 * mm, name_y - 5 * mm, cx + 55 * mm, name_y - 5 * mm)
+
+    # ── Cuerpo limpio (sin DNIs, IDs ni hashes) ────────────────
     course = str(cert.get("course_title") or "—").strip()
     hours = cert.get("course_hours")
-    grade = (cert.get("grade") or "").strip()
-    notes = (cert.get("notes") or "").strip()
-    city = (cert.get("city") or "Perú").strip()
-    # Capitalizar ciudad como "Trujillo"
+    fecha = _fmt_fecha(cert.get("issued_at"))
+    city = str(cert.get("city") or "").strip()
     if city:
         city = city[:1].upper() + city[1:]
-    fecha = _fmt_fecha(cert.get("issued_at"))
-    firmante = str(cert.get("issued_by") or inst).strip()
-    role = (cert.get("signer_role") or "Director Académico Nacional").strip()
 
-    y = height - 108 * mm
+    body_parts: list[str] = [
+        "Por haber aprobado satisfactoriamente el curso / programa de:"
+    ]
+    body_y = name_y - 18 * mm
+    body_y = _center_text(
+        c,
+        body_parts[0],
+        cx,
+        body_y,
+        font="Helvetica",
+        size=11,
+        color=MUTED,
+        max_width_chars=95,
+        leading=14,
+    )
 
-    # Párrafo nota + curso (nota en negrita en el mismo estilo)
-    if grade:
-        # "Por haber aprobado con una nota de 16 (Dieciséis) el Curso de Extensión:"
-        c.setFont("Helvetica", 11)
-        c.setFillColorRGB(*INK)
-        pre = "Por haber aprobado con una nota de "
-        mid = grade
-        post = " el curso / programa:"
-        full = pre + mid + post
-        # dibujar entero centrado, luego el curso en bold
-        y = _center(c, full, y, width, size=11, leading=14, color=INK, max_chars=105)
-    else:
-        y = _center(
-            c,
-            "Por haber culminado satisfactoriamente el curso / programa:",
-            y,
-            width,
-            size=11,
-            leading=14,
-            color=INK,
-        )
+    # Nombre del curso destacado
+    c.setFont("Helvetica-Bold", 14 if len(course) < 48 else 11)
+    c.setFillColorRGB(*NAVY)
+    for line in textwrap.wrap(course, width=70) or [course]:
+        c.drawCentredString(cx, body_y, line)
+        body_y -= 16
 
-    c.setFont("Helvetica-Bold", 13 if len(course) < 48 else 11)
-    c.setFillColorRGB(*INK)
-    for line in textwrap.wrap(course, 72) or [course]:
-        c.drawCentredString(width / 2, y, line)
-        y -= 15
-    y -= 4
-
-    # Fechas / horas (como el modelo en 1–2 líneas)
-    if notes and hours:
-        line1 = notes.rstrip(".")
-        line2 = f"con una duración de {hours} horas."
-        y = _center(c, line1, y, width, size=11, leading=14, color=INK)
-        y = _center(c, line2, y, width, size=11, leading=14, color=INK)
-    elif notes:
-        t = notes if notes.endswith(".") else notes + "."
-        y = _center(c, t, y, width, size=11, leading=14, color=INK)
-    elif hours:
-        y = _center(
-            c,
-            f"Con una duración de {hours} horas.",
-            y,
-            width,
-            size=11,
-            leading=14,
-            color=INK,
-        )
-
+    # Horas + fecha en una lectura fluida
+    detail: list[str] = []
+    if hours:
+        detail.append(f"con una duración de {hours} horas")
     if fecha:
-        c.setFont("Helvetica", 11)
-        c.setFillColorRGB(*INK)
-        c.drawCentredString(width / 2, y - 8, f"{city}, {fecha}")
+        if city:
+            detail.append(f"Otorgado en {city} el {fecha}")
+        else:
+            detail.append(f"Otorgado el {fecha}")
+    if detail:
+        # Primera línea: duración; segunda: otorgado (más limpio)
+        if hours and fecha:
+            body_y = _center_text(
+                c,
+                f"con una duración de {hours} horas.",
+                cx,
+                body_y - 2,
+                size=11,
+                color=MUTED,
+                leading=14,
+            )
+            body_y = _center_text(
+                c,
+                f"Otorgado el {fecha}." if not city else f"Otorgado en {city} el {fecha}.",
+                cx,
+                body_y,
+                size=11,
+                color=MUTED,
+                leading=14,
+            )
+        else:
+            text = detail[0]
+            if not text.endswith("."):
+                text += "."
+            body_y = _center_text(
+                c, text, cx, body_y - 2, size=11, color=MUTED, leading=14
+            )
 
-    # ——— QR izquierda ———
+    # Periodo extra (notas) solo si aporta texto legible, sin códigos
+    notes = (cert.get("notes") or "").strip()
+    if notes and not notes.upper().startswith("CERT-"):
+        body_y = _center_text(
+            c,
+            notes if notes.endswith(".") else notes + ".",
+            cx,
+            body_y - 2,
+            size=10,
+            color=MUTED,
+            max_width_chars=95,
+            leading=13,
+        )
+
+    # ── QR (abajo izquierda) — sin URL debajo ─────────────────
     qr_size = 26 * mm
-    qx, qy = 22 * mm, 24 * mm
+    qr_x = MARGIN + 10 * mm
+    qr_y = MARGIN + 12 * mm
     c.drawImage(
         ImageReader(io.BytesIO(qr_png_bytes(verify_url, box_size=5))),
-        qx,
-        qy,
+        qr_x,
+        qr_y,
         width=qr_size,
         height=qr_size,
         mask="auto",
     )
+    c.setFont("Helvetica", 7)
+    c.setFillColorRGB(*MUTED)
+    c.drawCentredString(qr_x + qr_size / 2, qr_y - 4 * mm, "Validar certificado")
 
-    # ——— Firma centrada (como TECSUP) ———
-    sig_cx = width / 2
+    # ── Firma elegante (centro-derecha) ───────────────────────
+    sig_cx = page_w * 0.62
+    sig_line_y = MARGIN + 28 * mm
     c.setStrokeColorRGB(*INK)
-    c.setLineWidth(0.9)
-    c.line(sig_cx - 45 * mm, 40 * mm, sig_cx + 45 * mm, 40 * mm)
+    c.setLineWidth(0.8)
+    c.line(sig_cx - 38 * mm, sig_line_y, sig_cx + 38 * mm, sig_line_y)
+
+    firmante = str(cert.get("issued_by") or inst).strip()
+    cargo = str(cert.get("signer_role") or "Director académico").strip()
+
     c.setFont("Helvetica-Bold", 10)
     c.setFillColorRGB(*INK)
-    c.drawCentredString(sig_cx, 33 * mm, firmante[:56])
-    c.setFont("Helvetica", 9)
-    c.setFillColorRGB(*MUTED)
-    c.drawCentredString(sig_cx, 27.5 * mm, role[:56])
+    c.drawCentredString(sig_cx, sig_line_y - 6 * mm, firmante[:52])
 
-    # ——— Pie URL + datos institución (sin barra verde gruesa) ———
-    c.setFont("Helvetica", 6.5)
+    c.setFont("Helvetica", 8)
     c.setFillColorRGB(*MUTED)
-    c.drawCentredString(width / 2, 16 * mm, verify_url[:115])
-    c.setFont("Helvetica", 6)
-    legal = (
-        f"{inst}  ·  Código {cert.get('id', '')}  ·  "
-        "Documento firmado digitalmente con Ed25519"
-    )
-    c.drawCentredString(width / 2, 11.5 * mm, legal[:130])
+    c.drawCentredString(sig_cx, sig_line_y - 11 * mm, cargo[:52])
+
+    # Institución debajo de la firma (sin IDs ni números)
+    c.setFont("Helvetica", 7.5)
+    c.setFillColorRGB(*NAVY)
+    c.drawCentredString(sig_cx, sig_line_y - 17 * mm, inst[:48])
 
     c.showPage()
     c.save()
     return buf.getvalue()
+
+
+# API usada por la app
+def build_certificate_pdf(cert: dict[str, Any], verify_url: str) -> bytes:
+    return generar_pdf(cert, verify_url)
