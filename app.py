@@ -102,12 +102,11 @@ def get_supabase_client():
 def guardar_certificado_supabase(rec: dict) -> None:
     """
     Inserta en public.certificados_certipe tras firmar.
-    Requiere columnas: dni_alumno, nombre_alumno, curso, document_hash, proof_value.
-    Opcional: fecha_emision (timestamptz).
+    codigo_cert = CERT-XXXX (id de la app); document_hash = SHA-256; proof_value = firma Ed25519.
     """
     client = get_supabase_client()
-    # issued_at puede ser ISO con timezone (ej. 2026-08-09T20:00:00+00:00)
     fila = {
+        "codigo_cert": rec.get("id"),  # CERT-XXXX-XXXX-XXXX
         "dni_alumno": rec.get("holder_doc"),
         "nombre_alumno": rec.get("holder_name"),
         "curso": rec.get("course_title"),
