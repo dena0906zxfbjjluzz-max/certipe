@@ -73,6 +73,10 @@ def cargar_credenciales() -> tuple[str | None, str | None, str | None]:
         return None, None, None
 
 
+# Tabla única de certificados en Supabase (INSERT + SELECT)
+TABLA_CERTIFICADOS = "certificados_certipe"
+
+
 def get_supabase_client():
     """
     Cliente Supabase desde secrets (URL y KEY en la raíz de st.secrets).
@@ -125,7 +129,7 @@ def guardar_certificado_supabase(rec: dict) -> dict:
     fila = {k: v for k, v in fila.items() if v is not None and v != ""}
 
     resp = (
-        client.table("certificados_certipe")
+        client.table(TABLA_CERTIFICADOS)
         .insert(fila)
         .execute()
     )
@@ -134,7 +138,7 @@ def guardar_certificado_supabase(rec: dict) -> dict:
 
     # Si el insert no devolvió filas, comprobar por código
     check = (
-        client.table("certificados_certipe")
+        client.table(TABLA_CERTIFICADOS)
         .select("*")
         .eq("codigo_cert", codigo)
         .limit(1)
@@ -151,17 +155,19 @@ def guardar_certificado_supabase(rec: dict) -> dict:
     )
 
 
-def listar_certificados_supabase() -> list[dict]:
-    """SELECT de public.certificados_certipe (más recientes primero)."""
+def listar_certificados_supabase(*, limit: int | None = None) -> list[dict]:
+    """SELECT exclusivo de public.certificados_certipe (más recientes primero)."""
     client = get_supabase_client()
-    resp = (
-        client.table("certificados_certipe")
+    q = (
+        client.table(TABLA_CERTIFICADOS)
         .select(
             "fecha_emision,dni_alumno,nombre_alumno,curso,document_hash,codigo_cert"
         )
         .order("fecha_emision", desc=True)
-        .execute()
     )
+    if limit is not None and limit > 0:
+        q = q.limit(limit)
+    resp = q.execute()
     return list(getattr(resp, "data", None) or [])
 
 
@@ -707,22 +713,54 @@ def panel_pubkey() -> None:
     )
 
 
+def _esc_html(text: object) -> str:
+    s = str(text if text is not None else "")
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
 def panel_recent() -> None:
-    items = certificates.list_all()[:12]
+    """Últimos emitidos: solo public.certificados_certipe (no JSON local ni otras tablas)."""
     rows = ""
+    try:
+        items = listar_certificados_supabase(limit=12)
+    except Exception as e:  # noqa: BLE001
+        st.markdown(
+            f"""
+            <div class="panel">
+              <h2>Últimos emitidos</h2>
+              <div class="list-row">
+                <span class="list-meta">No se pudo leer Supabase ({_esc_html(e)}).</span>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
     if not items:
-        rows = '<div class="list-row"><span class="list-meta">Aún no hay certificados.</span></div>'
+        rows = (
+            '<div class="list-row">'
+            '<span class="list-meta">Aún no hay certificados en la base de datos.</span>'
+            "</div>"
+        )
     else:
         for c in items:
-            status = c.get("status") or "valid"
-            tag_cls = "tag revoked" if status == "revoked" else "tag"
+            codigo = _esc_html(c.get("codigo_cert") or "—")
+            nombre = _esc_html(c.get("nombre_alumno") or "—")
+            curso = _esc_html(c.get("curso") or "—")
             rows += (
                 f'<div class="list-row">'
-                f'<span class="list-id">{c.get("id")}</span>'
-                f'<span class="list-meta">{c.get("holder_name")} · {c.get("course_title")}</span>'
-                f'<span class="{tag_cls}">{status}</span>'
+                f'<span class="list-id">{codigo}</span>'
+                f'<span class="list-meta">{nombre} · {curso}</span>'
+                f'<span class="tag">VALID</span>'
                 f"</div>"
             )
+
     st.markdown(
         f"""
         <div class="panel">
@@ -1008,7 +1046,7 @@ elif page == "emitir":
 elif page == "lista":
     nav_bar("Lista")
     st.markdown('<h1 class="hero-title">Lista de alumnos</h1>', unsafe_allow_html=True)
-    st.caption("Registros en Supabase · `public.certificados_certipe`")
+    st.caption(f"Registros en Supabase · `public.{TABLA_CERTIFICADOS}`")
     if st.button("← Inicio", type="secondary"):
         st.session_state["page"] = "inicio"
         st.rerun()
@@ -1025,7 +1063,7 @@ elif page == "lista":
         st.error(f"No se pudo consultar Supabase: {e}")
         st.info(
             "Comprueba `SUPABASE_URL`, `SUPABASE_KEY` y que la tabla "
-            "`public.certificados_certipe` exista y permita SELECT."
+            f"`public.{TABLA_CERTIFICADOS}` exista y permita SELECT."
         )
         foot()
         st.stop()
