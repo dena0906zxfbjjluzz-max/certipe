@@ -7,6 +7,8 @@ Python + Streamlit + secrets + deploy en Streamlit Cloud desde GitHub.
 
 - **Emitir** certificados de curso con firma Ed25519 de la institución  
 - **Validar** por código (`CERT-XXXX-...`): auténtico / alterado / revocado  
+- **PDF + QR** de verificación pública  
+- **Validación sin login:** `?codigo=CERT-...` o `?public=validar`  
 - **Clave pública** visible; la privada solo en secrets  
 
 No reemplaza IOFE / Firma Perú del Estado. Sirve para academias, bootcamps y certificados privados.

@@ -1,15 +1,17 @@
 """
 CertiPE — Emisor / validador de certificados Ed25519.
-Misma forma de trabajo que `validador`: Streamlit + secrets + GitHub Cloud.
+Streamlit + secrets + PDF + QR + validación pública.
 """
 
 from __future__ import annotations
 
 import os
+from urllib.parse import quote
 
 import streamlit as st
 
 from app import certificates, crypto
+from app import pdf_cert
 
 st.set_page_config(
     page_title="CertiPE · Certificados",
@@ -19,7 +21,6 @@ st.set_page_config(
 
 
 def _secret_get(*paths: str) -> str | None:
-    """Lee secret anidado: ('credenciales','LLAVE_PRIVADA') o plano."""
     try:
         cur = st.secrets
         for p in paths:
@@ -31,7 +32,6 @@ def _secret_get(*paths: str) -> str | None:
 
 
 def bootstrap_secrets() -> None:
-    """Carga LLAVE_PRIVADA e institución desde secrets (como validador)."""
     seed = (
         _secret_get("LLAVE_PRIVADA")
         or _secret_get("credenciales", "LLAVE_PRIVADA")
@@ -65,8 +65,104 @@ def cargar_credenciales() -> tuple[str | None, str | None, str | None]:
             return None, None, "Faltan usuario/clave en secrets['credenciales']."
         return usuario, clave, None
     except Exception:
-        # Sin login configurado → modo abierto (dev / demo)
         return None, None, None
+
+
+def app_base_url() -> str:
+    """URL pública de la app (para QR y links)."""
+    explicit = (
+        _secret_get("PUBLIC_BASE_URL")
+        or _secret_get("credenciales", "PUBLIC_BASE_URL")
+        or os.environ.get("PUBLIC_BASE_URL")
+    )
+    if explicit:
+        return explicit.rstrip("/")
+    try:
+        # Streamlit Cloud / proxy
+        headers = st.context.headers  # type: ignore[attr-defined]
+        host = headers.get("Host") or headers.get("host")
+        proto = headers.get("X-Forwarded-Proto") or headers.get("x-forwarded-proto") or "https"
+        if host:
+            return f"{proto}://{host}".rstrip("/")
+    except Exception:
+        pass
+    return ""
+
+
+def verify_url(cert_id: str) -> str:
+    base = app_base_url()
+    if base:
+        return f"{base}/?codigo={quote(cert_id)}"
+    # Fallback relativo (al escanear en la misma app)
+    return f"?codigo={quote(cert_id)}"
+
+
+def show_result_panel(result: dict, *, allow_revoke: bool = False) -> None:
+    if result["ok"]:
+        st.success(result["message"])
+    else:
+        st.error(result["message"])
+
+    if not result.get("certificate"):
+        return
+
+    c = result["certificate"]
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Estado", c.get("status", "—"))
+    m2.metric("Firma OK", str(result.get("signature_valid")))
+    m3.metric("Hash OK", str(result.get("hash_valid")))
+    st.write(
+        {
+            "código": c.get("id"),
+            "titular": c.get("holder_name"),
+            "documento": c.get("holder_doc"),
+            "curso": c.get("course_title"),
+            "institución": c.get("institution_name"),
+            "emitido": c.get("issued_at"),
+            "hash": c.get("payload_hash"),
+        }
+    )
+    link = verify_url(c["id"])
+    st.markdown(f"**Link de verificación:** `{link}`")
+    st.code(link, language=None)
+
+    try:
+        st.image(pdf_cert.qr_png_bytes(link), caption="QR de validación", width=180)
+    except Exception:
+        pass
+
+    try:
+        pdf_bytes = pdf_cert.build_certificate_pdf(c, link)
+        st.download_button(
+            "Descargar PDF",
+            data=pdf_bytes,
+            file_name=f"{c['id']}.pdf",
+            mime="application/pdf",
+            key=f"pdf_{c['id']}_{allow_revoke}",
+        )
+    except Exception as e:  # noqa: BLE001
+        st.warning(f"PDF no disponible: {e}")
+
+    if allow_revoke and c.get("status") == "valid":
+        if st.button("Revocar este certificado", type="secondary", key=f"rev_panel_{c['id']}"):
+            certificates.revoke(c["id"])
+            st.warning("Certificado revocado.")
+            st.rerun()
+
+
+def page_public_validate(prefill: str = "") -> None:
+    st.title("Validar certificado")
+    st.caption(f"{certificates.institution_name()} · verificación pública (sin login)")
+    codigo = st.text_input(
+        "Código del certificado",
+        value=prefill,
+        placeholder="CERT-XXXX-XXXX-XXXX",
+        key="public_codigo",
+    )
+    if st.button("Verificar firma", type="primary") or prefill:
+        cid = (codigo or prefill or "").strip().upper()
+        if cid:
+            show_result_panel(certificates.validate(cid), allow_revoke=False)
 
 
 bootstrap_secrets()
@@ -75,7 +171,6 @@ crypto.ensure_keys()
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
-# Estilo sobrio (distinto del tema agro de validador, misma idea de app seria)
 st.markdown(
     """
     <style>
@@ -89,10 +184,25 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ── Validación pública (sin login) ──────────────────────────────────────────
+qp = st.query_params
+codigo_qp = (qp.get("codigo") or qp.get("v") or "").strip().upper()
+public_mode = (qp.get("public") or qp.get("mode") or "").lower() in {"1", "true", "validar", "validate"}
+
+if codigo_qp:
+    st.title("CertiPE · Verificación")
+    st.caption(certificates.institution_name())
+    show_result_panel(certificates.validate(codigo_qp), allow_revoke=False)
+    st.stop()
+
+if public_mode:
+    page_public_validate()
+    st.stop()
+
 usuario_cfg, clave_cfg, err_creds = cargar_credenciales()
 login_requerido = usuario_cfg is not None and clave_cfg is not None
 
-# ── Login (igual patrón validador) ──────────────────────────────────────────
+# ── Login ───────────────────────────────────────────────────────────────────
 if login_requerido and not st.session_state["autenticado"]:
     st.title("CertiPE")
     st.caption(certificates.institution_name())
@@ -110,12 +220,12 @@ if login_requerido and not st.session_state["autenticado"]:
             else:
                 st.error("Usuario o clave incorrectos.")
     st.info(
-        "La pestaña **Validar** pública la publicamos sin login en un deploy aparte "
-        "o desactiva usuario/clave en secrets para demo abierta."
+        "¿Solo validar un certificado? Abre el link público "
+        "`?public=validar` o `?codigo=CERT-XXXX` (no requiere clave)."
     )
     st.stop()
 
-# ── App ─────────────────────────────────────────────────────────────────────
+# ── App privada ─────────────────────────────────────────────────────────────
 st.title("CertiPE")
 st.caption(
     f"{certificates.institution_name()} · firmas Ed25519 · "
@@ -154,51 +264,51 @@ with tab_emitir:
                     issued_by=issued_by or None,
                     notes=notes or None,
                 )
-                st.success(f"Emitido: **{rec['id']}**")
-                st.code(rec["id"], language=None)
-                st.json(
-                    {
-                        "id": rec["id"],
-                        "holder_name": rec["holder_name"],
-                        "course_title": rec["course_title"],
-                        "payload_hash": rec["payload_hash"],
-                        "signature": rec["signature"],
-                        "status": rec["status"],
-                    }
+                st.session_state["last_cert"] = rec
+
+    # Resultado fuera del form (PDF / QR / link)
+    if st.session_state.get("last_cert"):
+        rec = st.session_state["last_cert"]
+        st.success(f"Emitido: **{rec['id']}**")
+        link = verify_url(rec["id"])
+        st.markdown("**Link de verificación (cópialo o usa el QR):**")
+        st.code(link, language=None)
+        col_a, col_b = st.columns([1, 2])
+        with col_a:
+            try:
+                st.image(pdf_cert.qr_png_bytes(link), width=180)
+            except Exception as e:  # noqa: BLE001
+                st.caption(f"QR: {e}")
+        with col_b:
+            try:
+                pdf_bytes = pdf_cert.build_certificate_pdf(rec, link)
+                st.download_button(
+                    "Descargar PDF del certificado",
+                    data=pdf_bytes,
+                    file_name=f"{rec['id']}.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    key="pdf_last",
                 )
+            except Exception as e:  # noqa: BLE001
+                st.warning(f"PDF no disponible: {e}")
+            st.json(
+                {
+                    "id": rec["id"],
+                    "holder_name": rec["holder_name"],
+                    "course_title": rec["course_title"],
+                    "payload_hash": rec["payload_hash"],
+                    "status": rec["status"],
+                }
+            )
 
 with tab_validar:
     st.subheader("Validar certificado")
     codigo = st.text_input("Código", placeholder="CERT-XXXX-XXXX-XXXX", key="codigo_val")
-    if st.button("Verificar firma", type="primary") or codigo:
+    if st.button("Verificar firma", type="primary", key="btn_val") or codigo:
         cid = (codigo or "").strip().upper()
         if cid:
-            result = certificates.validate(cid)
-            if result["ok"]:
-                st.success(result["message"])
-            else:
-                st.error(result["message"])
-            if result.get("certificate"):
-                c = result["certificate"]
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Estado", c.get("status", "—"))
-                m2.metric("Firma OK", str(result.get("signature_valid")))
-                m3.metric("Hash OK", str(result.get("hash_valid")))
-                st.write(
-                    {
-                        "titular": c.get("holder_name"),
-                        "documento": c.get("holder_doc"),
-                        "curso": c.get("course_title"),
-                        "institución": c.get("institution_name"),
-                        "emitido": c.get("issued_at"),
-                        "hash": c.get("payload_hash"),
-                    }
-                )
-            if result.get("certificate"):
-                if st.button("Revocar este certificado", type="secondary"):
-                    certificates.revoke(cid)
-                    st.warning("Certificado revocado.")
-                    st.rerun()
+            show_result_panel(certificates.validate(cid), allow_revoke=True)
 
 with tab_lista:
     st.subheader("Certificados emitidos")
@@ -216,9 +326,25 @@ with tab_lista:
                         "hash": c.get("payload_hash"),
                     }
                 )
-                if c.get("status") == "valid" and st.button("Revocar", key=f"rev_{c['id']}"):
-                    certificates.revoke(c["id"])
-                    st.rerun()
+                link = verify_url(c["id"])
+                st.code(link, language=None)
+                b1, b2 = st.columns(2)
+                with b1:
+                    try:
+                        pdf_bytes = pdf_cert.build_certificate_pdf(c, link)
+                        st.download_button(
+                            "PDF",
+                            data=pdf_bytes,
+                            file_name=f"{c['id']}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_list_{c['id']}",
+                        )
+                    except Exception:
+                        pass
+                with b2:
+                    if c.get("status") == "valid" and st.button("Revocar", key=f"rev_{c['id']}"):
+                        certificates.revoke(c["id"])
+                        st.rerun()
 
 with tab_crypto:
     st.subheader("Clave pública de la institución")
@@ -229,24 +355,18 @@ with tab_crypto:
             "alg": "Ed25519",
             "fingerprint": crypto.public_key_fingerprint(),
             "public_key_hex": crypto.public_key_hex(),
+            "public_base_url": app_base_url() or "(auto Host / define PUBLIC_BASE_URL en secrets)",
         }
     )
     st.markdown(
         """
-**Streamlit Cloud (como validador)**  
-Settings → Secrets:
+**Validación pública (sin login)**  
+- `https://tu-app.streamlit.app/?codigo=CERT-XXXX`  
+- `https://tu-app.streamlit.app/?public=validar`  
 
+Opcional en secrets:
 ```toml
-[credenciales]
-usuario = "admin"
-clave = "cambia-esto"
-LLAVE_PRIVADA = "64_caracteres_hex"
-nombre_institucion = "Tu Academia"
-```
-
-Generar seed local:
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
+PUBLIC_BASE_URL = "https://tu-app.streamlit.app"
 ```
 """
     )
@@ -255,3 +375,4 @@ if login_requerido and st.session_state["autenticado"]:
     if st.sidebar.button("Cerrar sesión"):
         st.session_state["autenticado"] = False
         st.rerun()
+    st.sidebar.markdown("[Validación pública](?public=validar)")
