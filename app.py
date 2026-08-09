@@ -4,7 +4,10 @@ CertiPE en Streamlit — misma cara que la web local (colores y layout).
 
 from __future__ import annotations
 
+import csv
+import io
 import os
+from datetime import datetime
 from urllib.parse import quote
 
 import streamlit as st
@@ -146,6 +149,164 @@ def guardar_certificado_supabase(rec: dict) -> dict:
         "curso, document_hash, proof_value, fecha_emision. "
         f"Detalle: {resp!r}"
     )
+
+
+def listar_certificados_supabase() -> list[dict]:
+    """SELECT de public.certificados_certipe (más recientes primero)."""
+    client = get_supabase_client()
+    resp = (
+        client.table("certificados_certipe")
+        .select(
+            "fecha_emision,dni_alumno,nombre_alumno,curso,document_hash,codigo_cert"
+        )
+        .order("fecha_emision", desc=True)
+        .execute()
+    )
+    return list(getattr(resp, "data", None) or [])
+
+
+def _fmt_fecha_lista(raw: object) -> str:
+    if not raw:
+        return "—"
+    s = str(raw)
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return s[:19]
+
+
+def filas_alumnos_para_tabla(rows: list[dict]) -> list[dict]:
+    """Columnas legibles para st.dataframe / exportación."""
+    return [
+        {
+            "Fecha": _fmt_fecha_lista(r.get("fecha_emision")),
+            "DNI": (r.get("dni_alumno") or "—"),
+            "Nombre del Alumno": (r.get("nombre_alumno") or "—"),
+            "Curso": (r.get("curso") or "—"),
+            "Código de Verificación": (r.get("document_hash") or "—"),
+        }
+        for r in rows
+    ]
+
+
+def filtrar_alumnos(rows: list[dict], query: str) -> list[dict]:
+    q = (query or "").strip().lower()
+    if not q:
+        return rows
+    out: list[dict] = []
+    for r in rows:
+        dni = str(r.get("dni_alumno") or "").lower()
+        nombre = str(r.get("nombre_alumno") or "").lower()
+        if q in dni or q in nombre:
+            out.append(r)
+    return out
+
+
+def exportar_lista_csv(filas: list[dict]) -> bytes:
+    campos = [
+        "Fecha",
+        "DNI",
+        "Nombre del Alumno",
+        "Curso",
+        "Código de Verificación",
+    ]
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=campos, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(filas)
+    # utf-8-sig: Excel abre tildes correctamente
+    return buf.getvalue().encode("utf-8-sig")
+
+
+def exportar_lista_excel(filas: list[dict]) -> bytes:
+    """Genera .xlsx sin dependencias extra (SpreadsheetML empaquetado)."""
+    import zipfile
+    from xml.sax.saxutils import escape
+
+    campos = [
+        "Fecha",
+        "DNI",
+        "Nombre del Alumno",
+        "Curso",
+        "Código de Verificación",
+    ]
+
+    def cell_inline(ref: str, value: str) -> str:
+        return (
+            f'<c r="{ref}" t="inlineStr"><is><t>{escape(str(value))}</t></is></c>'
+        )
+
+    def col_letter(n: int) -> str:
+        # 1 -> A
+        s = ""
+        while n:
+            n, r = divmod(n - 1, 26)
+            s = chr(65 + r) + s
+        return s
+
+    sheet_rows: list[str] = []
+    # header
+    header_cells = "".join(
+        cell_inline(f"{col_letter(i + 1)}1", h) for i, h in enumerate(campos)
+    )
+    sheet_rows.append(f'<row r="1">{header_cells}</row>')
+    for ri, fila in enumerate(filas, start=2):
+        cells = "".join(
+            cell_inline(f"{col_letter(ci + 1)}{ri}", fila.get(campo, ""))
+            for ci, campo in enumerate(campos)
+        )
+        sheet_rows.append(f'<row r="{ri}">{cells}</row>')
+
+    sheet_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<sheetData>{"".join(sheet_rows)}</sheetData>'
+        "</worksheet>"
+    )
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/xl/workbook.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        '<Override PartName="/xl/worksheets/sheet1.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        "</Types>"
+    )
+    rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+        'Target="xl/workbook.xml"/>'
+        "</Relationships>"
+    )
+    wb_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        'Target="worksheets/sheet1.xml"/>'
+        "</Relationships>"
+    )
+    workbook = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheets><sheet name="Alumnos" sheetId="1" r:id="rId1"/></sheets>'
+        "</workbook>"
+    )
+
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", content_types)
+        zf.writestr("_rels/.rels", rels)
+        zf.writestr("xl/workbook.xml", workbook)
+        zf.writestr("xl/_rels/workbook.xml.rels", wb_rels)
+        zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+    return out.getvalue()
 
 
 def app_base_url() -> str:
@@ -802,28 +963,80 @@ elif page == "emitir":
 
 elif page == "lista":
     nav_bar("Lista")
-    st.markdown('<h1 class="hero-title">Certificados emitidos</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="hero-title">Lista de alumnos</h1>', unsafe_allow_html=True)
+    st.caption("Registros en Supabase · `public.certificados_certipe`")
     if st.button("← Inicio", type="secondary"):
         st.session_state["page"] = "inicio"
         st.rerun()
-    panel_recent()
-    for c in certificates.list_all():
-        with st.expander(f"{c['id']} · {c.get('status')}"):
-            link = verify_url(c["id"])
-            st.code(link, language=None)
-            try:
-                st.download_button(
-                    "PDF",
-                    data=pdf_cert.build_certificate_pdf(c, link),
-                    file_name=f"{c['id']}.pdf",
-                    mime="application/pdf",
-                    key=f"pdf_{c['id']}",
-                )
-            except Exception:
-                pass
-            if c.get("status") == "valid" and st.button("Revocar", key=f"r_{c['id']}"):
-                certificates.revoke(c["id"])
-                st.rerun()
+
+    busqueda = st.text_input(
+        "Buscar por nombre o DNI",
+        placeholder="Ej. Padilla o 12345678",
+        key="lista_busqueda",
+    )
+
+    try:
+        registros = listar_certificados_supabase()
+    except Exception as e:  # noqa: BLE001
+        st.error(f"No se pudo consultar Supabase: {e}")
+        st.info(
+            "Comprueba `SUPABASE_URL`, `SUPABASE_KEY` y que la tabla "
+            "`public.certificados_certipe` exista y permita SELECT."
+        )
+        foot()
+        st.stop()
+
+    filtrados = filtrar_alumnos(registros, busqueda)
+    filas = filas_alumnos_para_tabla(filtrados)
+
+    st.markdown(
+        f"**{len(filas)}** registro(s)"
+        + (f" (de {len(registros)} totales)" if busqueda.strip() else "")
+    )
+
+    st.dataframe(
+        filas,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Código de Verificación": st.column_config.TextColumn(
+                "Código de Verificación",
+                width="large",
+            ),
+            "Nombre del Alumno": st.column_config.TextColumn(
+                "Nombre del Alumno",
+                width="medium",
+            ),
+        },
+    )
+
+    if not filas:
+        st.info("No hay alumnos que coincidan con la búsqueda (o la tabla está vacía).")
+    else:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M")
+        col_csv, col_xlsx = st.columns(2)
+        with col_csv:
+            st.download_button(
+                "Descargar CSV",
+                data=exportar_lista_csv(filas),
+                file_name=f"lista_alumnos_certipe_{stamp}.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="dl_lista_csv",
+            )
+        with col_xlsx:
+            st.download_button(
+                "Descargar Excel",
+                data=exportar_lista_excel(filas),
+                file_name=f"lista_alumnos_certipe_{stamp}.xlsx",
+                mime=(
+                    "application/vnd.openxmlformats-officedocument"
+                    ".spreadsheetml.sheet"
+                ),
+                use_container_width=True,
+                key="dl_lista_xlsx",
+            )
+
     foot()
 
 elif page == "crypto":
