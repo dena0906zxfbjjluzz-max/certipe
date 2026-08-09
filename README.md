@@ -1,32 +1,28 @@
 # CertiPE — certificados firmados Ed25519 (Streamlit)
 
-Misma forma de trabajo que [validador](https://github.com/dena0906zxfbjjluzz-max/validador):  
-Python + Streamlit + secrets + deploy en Streamlit Cloud desde GitHub.
+Python + Streamlit + secrets + Supabase + deploy en Streamlit Cloud.
 
 ## Qué hace
 
-- **Emitir** certificados de curso con firma Ed25519 de la institución  
-- **Validar** por código (`CERT-XXXX-...`): auténtico / alterado / revocado  
-- **PDF + QR** de verificación pública  
-- **Validación sin login:** `?codigo=CERT-...` o `?public=validar`  
-- **Clave pública** visible; la privada solo en secrets  
+- **Emitir** certificados con firma Ed25519  
+- **Validar** por código (`CERT-XXXX-...`)  
+- **PDF + QR** de verificación  
+- **Lista de alumnos** y export CSV/Excel desde Supabase  
+- Verificación opcional con **motor_rust** (Rust)
 
-No reemplaza IOFE / Firma Perú del Estado. Sirve para academias, bootcamps y certificados privados.
-
-## Arranque local (como validador)
+## Arranque local
 
 ```bash
 git clone https://github.com/dena0906zxfbjjluzz-max/certipe.git
 cd certipe
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+# Si motor_rust falla, instala Rust y: maturin develop --release
 cp .streamlit/secrets.toml.example .streamlit/secrets.toml
-# editar LLAVE_PRIVADA, usuario y clave
 streamlit run app.py
 ```
 
-Generar seed Ed25519 (64 hex):
+Seed Ed25519 (64 hex):
 
 ```bash
 python3 -c "import secrets; print(secrets.token_hex(32))"
@@ -34,22 +30,19 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ## Streamlit Cloud
 
-1. Sube este repo a GitHub  
-2. [share.streamlit.io](https://share.streamlit.io) → New app  
-3. Main file: `app.py`  
-4. Secrets → pega el contenido de `.streamlit/secrets.toml.example` (con valores reales)
+1. Repo en GitHub · Main file: `app.py`  
+2. Secrets: copiar `.streamlit/secrets.toml.example` con valores reales  
+3. `packages.txt` instala `rustc`/`cargo` para compilar `motor_rust`
 
-## Estructura
+## Archivos clave
 
 | Archivo | Rol |
 |---------|-----|
 | `app.py` | UI Streamlit |
-| `app/crypto.py` | Ed25519 (cryptography / PyNaCl) |
+| `app/crypto.py` | Ed25519 (+ motor_rust) |
 | `app/certificates.py` | Emitir / validar / revocar |
-| `app/store.py` | Almacenamiento JSON local |
+| `app/pdf_cert.py` | PDF certificado |
+| `app/store.py` | Caché local del runtime |
+| `src/lib.rs` | Motor Rust |
+| `supabase/schema_certificados_certipe.sql` | Tabla Supabase |
 | `.streamlit/secrets.toml.example` | Plantilla de secretos |
-
-## Nota sobre datos en la nube
-
-El JSON en `data/` es local al contenedor: en Streamlit Cloud puede reiniciarse.  
-Para producción, conviene Supabase (igual idea que validador). MVP ok para demos.

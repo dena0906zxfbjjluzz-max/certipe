@@ -26,7 +26,7 @@ def institution_id() -> str:
     return (os.environ.get("INSTITUTION_ID") or DEFAULT_INSTITUTION_ID).strip()
 
 
-# Compatibilidad con código anterior
+# Compatibilidad (nombres por defecto; valores reales vía env/secrets)
 INSTITUTION_NAME = DEFAULT_INSTITUTION_NAME
 INSTITUTION_ID = DEFAULT_INSTITUTION_ID
 

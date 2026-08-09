@@ -1,5 +1,5 @@
 """
-CertiPE en Streamlit — misma cara que la web local (colores y layout).
+CertiPE en Streamlit — certificados Ed25519, Supabase y PDF.
 """
 
 from __future__ import annotations
@@ -15,7 +15,8 @@ import streamlit as st
 from app import certificates, crypto
 from app import pdf_cert
 
-APP_VERSION = "1.2 · look web local"
+APP_VERSION = "1.3"
+
 
 st.set_page_config(
     page_title="CertiPE · Certificados",
@@ -375,7 +376,7 @@ def verify_url(cert_id: str) -> str:
 
 
 def inject_web_look() -> None:
-    """Estilos calcados de static/styles.css (web local)."""
+    """Tema visual de la app (UI Streamlit)."""
     st.markdown(
         """
         <style>
