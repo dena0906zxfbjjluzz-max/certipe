@@ -204,6 +204,11 @@ def filtrar_alumnos(rows: list[dict], query: str) -> list[dict]:
 
 
 def exportar_lista_csv(filas: list[dict]) -> bytes:
+    """
+    CSV orientado a Excel (ES):
+    - encoding utf-8-sig (BOM) para tildes/ñ
+    - sep=';' para que Excel separe columnas automáticamente
+    """
     campos = [
         "Fecha",
         "DNI",
@@ -211,12 +216,33 @@ def exportar_lista_csv(filas: list[dict]) -> bytes:
         "Curso",
         "Código de Verificación",
     ]
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=campos, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerows(filas)
-    # utf-8-sig: Excel abre tildes correctamente
-    return buf.getvalue().encode("utf-8-sig")
+    try:
+        import pandas as pd  # type: ignore
+
+        df = pd.DataFrame(filas, columns=campos)
+        bio = io.BytesIO()
+        df.to_csv(
+            bio,
+            index=False,
+            sep=";",
+            encoding="utf-8-sig",
+            lineterminator="\r\n",
+        )
+        return bio.getvalue()
+    except Exception:
+        # Fallback sin pandas: mismas reglas (sep=; + BOM)
+        buf = io.StringIO()
+        writer = csv.DictWriter(
+            buf,
+            fieldnames=campos,
+            extrasaction="ignore",
+            delimiter=";",
+            lineterminator="\r\n",
+            quoting=csv.QUOTE_MINIMAL,
+        )
+        writer.writeheader()
+        writer.writerows(filas)
+        return buf.getvalue().encode("utf-8-sig")
 
 
 def exportar_lista_excel(filas: list[dict]) -> bytes:
