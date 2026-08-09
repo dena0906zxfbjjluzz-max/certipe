@@ -5,3 +5,4 @@ qrcode>=7.4.0
 Pillow>=10.0.0
 supabase>=2.4.0
 openpyxl>=3.1.0
+maturin>=1.0.0
