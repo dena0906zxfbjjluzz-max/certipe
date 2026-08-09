@@ -99,14 +99,18 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-def guardar_certificado_supabase(rec: dict) -> None:
+def guardar_certificado_supabase(rec: dict) -> dict:
     """
-    Inserta en public.certificados_certipe tras firmar.
-    codigo_cert = CERT-XXXX (id de la app); document_hash = SHA-256; proof_value = firma Ed25519.
+    Inserta en public.certificados_certipe y verifica que quede guardado.
+    Devuelve la fila leída desde Supabase.
     """
     client = get_supabase_client()
+    codigo = (rec.get("id") or "").strip()
+    if not codigo:
+        raise RuntimeError("El certificado no tiene código (id).")
+
     fila = {
-        "codigo_cert": rec.get("id"),  # CERT-XXXX-XXXX-XXXX
+        "codigo_cert": codigo,
         "dni_alumno": rec.get("holder_doc"),
         "nombre_alumno": rec.get("holder_name"),
         "curso": rec.get("course_title"),
@@ -114,10 +118,33 @@ def guardar_certificado_supabase(rec: dict) -> None:
         "proof_value": rec.get("signature"),
         "fecha_emision": rec.get("issued_at"),
     }
-    (
+    # Quitar None (evita errores de columnas opcionales)
+    fila = {k: v for k, v in fila.items() if v is not None and v != ""}
+
+    resp = (
         client.table("certificados_certipe")
         .insert(fila)
         .execute()
+    )
+    if getattr(resp, "data", None):
+        return resp.data[0]
+
+    # Si el insert no devolvió filas, comprobar por código
+    check = (
+        client.table("certificados_certipe")
+        .select("*")
+        .eq("codigo_cert", codigo)
+        .limit(1)
+        .execute()
+    )
+    if getattr(check, "data", None):
+        return check.data[0]
+
+    raise RuntimeError(
+        "Supabase no devolvió la fila insertada. "
+        "Revisa que existan las columnas: codigo_cert, dni_alumno, nombre_alumno, "
+        "curso, document_hash, proof_value, fecha_emision. "
+        f"Detalle: {resp!r}"
     )
 
 
@@ -720,10 +747,12 @@ elif page == "emitir":
                 st.session_state["supabase_ok"] = False
                 st.session_state["supabase_error"] = None
                 try:
-                    guardar_certificado_supabase(rec)
+                    fila_sb = guardar_certificado_supabase(rec)
                     st.session_state["supabase_ok"] = True
+                    st.session_state["supabase_row"] = fila_sb
                 except Exception as e:  # noqa: BLE001
                     st.session_state["supabase_error"] = str(e)
+                    st.session_state["supabase_row"] = None
                 # Vaciar formulario para el siguiente certificado
                 st.session_state["emit_form_id"] = form_id + 1
                 st.rerun()
@@ -739,6 +768,13 @@ elif page == "emitir":
             st.success(
                 "✅ Certificado guardado de forma segura en la base de datos de Supabase"
             )
+            fila = st.session_state.get("supabase_row") or {}
+            if fila:
+                st.caption(
+                    f"Supabase · codigo_cert=`{fila.get('codigo_cert') or '—'}` · "
+                    f"nombre=`{fila.get('nombre_alumno') or '—'}` · "
+                    f"curso=`{fila.get('curso') or '—'}`"
+                )
         elif st.session_state.get("supabase_error"):
             st.error(f"No se pudo guardar en Supabase: {st.session_state['supabase_error']}")
         link = verify_url(rec["id"])

@@ -1,24 +1,24 @@
--- Columnas CertiPE en public.certificados_certipe
--- Ejecutar en Supabase → SQL Editor → Run
+-- Recrear tabla completa para CertiPE (borrar datos de prueba)
+-- Supabase → SQL Editor → Run
 
-alter table public.certificados_certipe
-  add column if not exists document_hash text;
+DROP TABLE IF EXISTS public.certificados_certipe;
 
-alter table public.certificados_certipe
-  add column if not exists proof_value text;
+CREATE TABLE public.certificados_certipe (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    fecha_emision TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    codigo_cert TEXT UNIQUE,
+    dni_alumno TEXT NOT NULL,
+    nombre_alumno TEXT NOT NULL,
+    curso TEXT NOT NULL,
+    document_hash TEXT NOT NULL UNIQUE,
+    proof_value TEXT NOT NULL
+);
 
--- Código del certificado (CERT-XXXX-XXXX-XXXX)
-alter table public.certificados_certipe
-  add column if not exists codigo_cert text;
+-- Importante: sin RLS para que Streamlit (anon key) pueda insertar en el MVP
+ALTER TABLE public.certificados_certipe DISABLE ROW LEVEL SECURITY;
 
--- Índice único para buscar por código
-create unique index if not exists certificados_certipe_codigo_cert_uidx
-  on public.certificados_certipe (codigo_cert)
-  where codigo_cert is not null;
-
-alter table public.certificados_certipe
-  alter column fecha_emision set default now();
-
-comment on column public.certificados_certipe.codigo_cert is 'Código público CERT-XXXX usado en validación';
-comment on column public.certificados_certipe.document_hash is 'SHA-256 del JSON canónico';
-comment on column public.certificados_certipe.proof_value is 'Firma Ed25519 (base64url)';
+-- Comprobar columnas
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'certificados_certipe'
+ORDER BY ordinal_position;
