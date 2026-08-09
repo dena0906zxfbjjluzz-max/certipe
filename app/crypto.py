@@ -1,4 +1,7 @@
-"""Firmas Ed25519 (mismo enfoque que validador: seed hex + cryptography/PyNaCl)."""
+"""Firmas Ed25519 (mismo enfoque que validador: seed hex + cryptography/PyNaCl).
+
+Prioridad de verificación: motor_rust (Rust/PyO3) → cryptography → PyNaCl.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ SEED_PATH = KEYS_DIR / "institution_ed25519.seed.hex"
 
 # Seed en memoria (prioridad: set_seed / env / archivo / generar)
 _SEED: bytes | None = None
+_LAST_VERIFY_BACKEND: str = "—"
 
 
 def _b64(data: bytes) -> str:
@@ -75,6 +79,21 @@ def ensure_keys() -> None:
     _load_seed()
 
 
+def motor_rust_disponible() -> bool:
+    """True si el módulo nativo `motor_rust` carga en este runtime."""
+    try:
+        import motor_rust  # noqa: F401
+
+        return hasattr(motor_rust, "verificar_firma_rust")
+    except Exception:
+        return False
+
+
+def last_verify_backend() -> str:
+    """Backend usado en la última verificación (`motor_rust`, `cryptography`, …)."""
+    return _LAST_VERIFY_BACKEND
+
+
 def _sign_raw(message: bytes) -> tuple[bytes, bytes, str]:
     """
     Retorna (public_key_raw_32, signature_64, backend).
@@ -107,32 +126,61 @@ def _sign_raw(message: bytes) -> tuple[bytes, bytes, str]:
     )
 
 
+def _verify_with_rust(message: bytes, signature: bytes, public_key: bytes) -> bool | None:
+    """
+    Verifica con motor_rust. Devuelve True/False, o None si el módulo no está.
+    El mensaje se pasa en hex (payload canónico firmado, bytes → hex).
+    """
+    try:
+        import motor_rust
+    except Exception:
+        return None
+    if not hasattr(motor_rust, "verificar_firma_rust"):
+        return None
+    try:
+        return bool(
+            motor_rust.verificar_firma_rust(
+                public_key.hex(),
+                signature.hex(),
+                message.hex(),
+            )
+        )
+    except Exception:
+        return None
+
+
 def _verify_raw(message: bytes, signature: bytes, public_key: bytes) -> bool:
-    errores: list[str] = []
+    global _LAST_VERIFY_BACKEND
+
+    rust_ok = _verify_with_rust(message, signature, public_key)
+    if rust_ok is not None:
+        _LAST_VERIFY_BACKEND = "motor_rust"
+        return rust_ok
+
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
         vk = Ed25519PublicKey.from_public_bytes(public_key)
         vk.verify(signature, message)
+        _LAST_VERIFY_BACKEND = "cryptography"
         return True
-    except Exception as e:  # noqa: BLE001
-        errores.append(f"cryptography: {e}")
+    except Exception:
+        pass
 
     try:
         from nacl.signing import VerifyKey
-        from nacl.exceptions import BadSignatureError
 
         VerifyKey(public_key).verify(message, signature)
+        _LAST_VERIFY_BACKEND = "pynacl"
         return True
-    except Exception as e:  # noqa: BLE001
-        errores.append(f"pynacl: {e}")
+    except Exception:
+        pass
 
+    _LAST_VERIFY_BACKEND = "none"
     return False
 
 
 def public_key_raw() -> bytes:
-    pub, _, _ = _sign_raw(b"")  # no: signing empty is ok but wasteful
-    # better: derive without sign
     seed = _load_seed()
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -184,7 +232,9 @@ def verify_payload(
     try:
         signature = _b64d(signature_b64)
         if public_key_b64:
-            if len(public_key_b64) == 64 and all(c in "0123456789abcdefABCDEF" for c in public_key_b64):
+            if len(public_key_b64) == 64 and all(
+                c in "0123456789abcdefABCDEF" for c in public_key_b64
+            ):
                 pub = bytes.fromhex(public_key_b64)
             else:
                 pub = _b64d(public_key_b64)

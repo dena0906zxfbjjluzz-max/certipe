@@ -669,10 +669,11 @@ def show_result_panel(result: dict, *, allow_revoke: bool = False) -> None:
         return
 
     c = result["certificate"]
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Estado", c.get("status", "—"))
     m2.metric("Firma OK", str(result.get("signature_valid")))
     m3.metric("Hash OK", str(result.get("hash_valid")))
+    m4.metric("Motor", result.get("verify_backend") or crypto.last_verify_backend())
     st.write(
         {
             "código": c.get("id"),
@@ -1097,6 +1098,8 @@ elif page == "crypto":
             "alg": "Ed25519",
             "fingerprint": crypto.public_key_fingerprint(),
             "public_key_hex": crypto.public_key_hex(),
+            "motor_rust": crypto.motor_rust_disponible(),
+            "last_verify_backend": crypto.last_verify_backend(),
             "app_version": APP_VERSION,
         }
     )

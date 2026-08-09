@@ -129,6 +129,7 @@ def validate(cert_id: str) -> dict[str, Any]:
     sig_ok = crypto.verify_payload(payload, rec["signature"], rec.get("public_key"))
     hash_ok = crypto.payload_hash(payload) == rec.get("payload_hash")
     status = rec.get("status", "valid")
+    backend = crypto.last_verify_backend()
 
     if not sig_ok or not hash_ok:
         return {
@@ -138,6 +139,7 @@ def validate(cert_id: str) -> dict[str, Any]:
             "certificate": rec,
             "signature_valid": sig_ok,
             "hash_valid": hash_ok,
+            "verify_backend": backend,
         }
 
     if status == "revoked":
@@ -148,15 +150,21 @@ def validate(cert_id: str) -> dict[str, Any]:
             "certificate": rec,
             "signature_valid": True,
             "hash_valid": True,
+            "verify_backend": backend,
         }
 
+    motor_txt = " (motor_rust)" if backend == "motor_rust" else f" ({backend})"
     return {
         "ok": True,
         "reason": "valid",
-        "message": "Certificado auténtico: firma Ed25519 válida y sin alteraciones.",
+        "message": (
+            "Certificado auténtico: firma Ed25519 válida y sin alteraciones"
+            f"{motor_txt}."
+        ),
         "certificate": rec,
         "signature_valid": True,
         "hash_valid": True,
+        "verify_backend": backend,
     }
 
 
