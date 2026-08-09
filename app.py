@@ -70,6 +70,55 @@ def cargar_credenciales() -> tuple[str | None, str | None, str | None]:
         return None, None, None
 
 
+def get_supabase_client():
+    """
+    Cliente Supabase desde secrets (URL y KEY en la raíz de st.secrets).
+    """
+    try:
+        url = str(st.secrets["SUPABASE_URL"]).strip()
+        key = str(st.secrets["SUPABASE_KEY"]).strip()
+    except Exception:
+        # Fallback anidado (misma idea que validador)
+        url = _secret_get("credenciales", "SUPABASE_URL") or _secret_get("SUPABASE_URL") or ""
+        key = (
+            _secret_get("credenciales", "SUPABASE_KEY")
+            or _secret_get("SUPABASE_KEY")
+            or ""
+        )
+    if not url or not key:
+        raise RuntimeError(
+            "Faltan SUPABASE_URL o SUPABASE_KEY en secrets "
+            '(ej. SUPABASE_URL = "https://xxx.supabase.co").'
+        )
+    try:
+        from supabase import create_client
+    except ImportError as exc:
+        raise RuntimeError(
+            "Falta el paquete `supabase`. Añádelo a requirements.txt e instala dependencias."
+        ) from exc
+    return create_client(url, key)
+
+
+def guardar_certificado_supabase(rec: dict) -> None:
+    """
+    Inserta en public.certificados_certipe tras firmar.
+    document_hash = SHA-256 del payload; proof_value = firma Ed25519.
+    """
+    client = get_supabase_client()
+    fila = {
+        "dni_alumno": rec.get("holder_doc"),
+        "nombre_alumno": rec.get("holder_name"),
+        "curso": rec.get("course_title"),
+        "document_hash": rec.get("payload_hash"),
+        "proof_value": rec.get("signature"),
+    }
+    (
+        client.table("certificados_certipe")
+        .insert(fila)
+        .execute()
+    )
+
+
 def app_base_url() -> str:
     explicit = (
         _secret_get("PUBLIC_BASE_URL")
@@ -653,6 +702,14 @@ elif page == "emitir":
                     notes=notes or None,
                 )
                 st.session_state["last_cert"] = rec
+                st.session_state["supabase_ok"] = False
+                st.session_state["supabase_error"] = None
+                try:
+                    # Después de firma Ed25519 + hash SHA-256 → Supabase
+                    guardar_certificado_supabase(rec)
+                    st.session_state["supabase_ok"] = True
+                except Exception as e:  # noqa: BLE001
+                    st.session_state["supabase_error"] = str(e)
 
     if st.button("← Inicio", type="secondary"):
         st.session_state["page"] = "inicio"
@@ -661,6 +718,12 @@ elif page == "emitir":
     if st.session_state.get("last_cert"):
         rec = st.session_state["last_cert"]
         st.success(f"Emitido: **{rec['id']}**")
+        if st.session_state.get("supabase_ok"):
+            st.success(
+                "✅ Certificado guardado de forma segura en la base de datos de Supabase"
+            )
+        elif st.session_state.get("supabase_error"):
+            st.error(f"No se pudo guardar en Supabase: {st.session_state['supabase_error']}")
         link = verify_url(rec["id"])
         st.code(link, language=None)
         ca, cb = st.columns([1, 2])
