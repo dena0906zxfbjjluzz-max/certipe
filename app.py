@@ -627,18 +627,36 @@ def nav_bar(page: str) -> None:
 
 
 def hero_home() -> None:
+    """Home público: verificación (no emisión)."""
     inst = certificates.institution_name()
     st.markdown(
         f"""
         <p class="eyebrow">{inst}</p>
-        <h1 class="hero-title">Certificados firmados con Ed25519</h1>
+        <h1 class="hero-title">Validar código</h1>
         <p class="lead">
-          Emite un certificado, fírmalo con la clave de la institución y compártelo.
-          Cualquiera puede verificar si es auténtico o si lo alteraron.
+          Consulta la autenticidad de un certificado con el código
+          (ej. CERT-XXXX-XXXX-XXXX). Abajo ves la clave pública de la
+          institución y los últimos certificados emitidos.
         </p>
         """,
         unsafe_allow_html=True,
     )
+
+
+def panel_validar_codigo(*, allow_revoke: bool = False) -> None:
+    """Formulario de validación embebido en el home público."""
+    codigo = st.text_input(
+        "Código del certificado",
+        placeholder="CERT-....",
+        key="home_codigo_validar",
+    )
+    go = st.button("Verificar firma", type="primary", use_container_width=True, key="home_btn_validar")
+    if go and codigo.strip():
+        show_result_panel(
+            certificates.validate(codigo.strip().upper()),
+            allow_revoke=allow_revoke,
+        )
+
 
 
 def show_result_panel(result: dict, *, allow_revoke: bool = False) -> None:
@@ -749,16 +767,28 @@ inject_web_look()
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 if "page" not in st.session_state:
+    # Home público = consulta / validar (clave pública + últimos emitidos)
     st.session_state["page"] = "inicio"
 
 qp = st.query_params
 codigo_qp = (qp.get("codigo") or qp.get("v") or "").strip().upper()
-if (qp.get("public") or qp.get("mode") or "").lower() in {"1", "true", "validar", "validate"}:
-    st.session_state["page"] = "validar_publico"
-if qp.get("page") == "emitir":
+page_qp = (qp.get("page") or "").strip().lower()
+mode_qp = (qp.get("public") or qp.get("mode") or "").strip().lower()
+
+# Deep links: validar y modo público → home de consulta
+if mode_qp in {"1", "true", "validar", "validate"} or page_qp in {
+    "validar",
+    "validar_publico",
+    "inicio",
+    "home",
+}:
+    st.session_state["page"] = "inicio"
+elif page_qp == "emitir":
     st.session_state["page"] = "emitir"
-if qp.get("page") == "validar":
-    st.session_state["page"] = "validar"
+elif page_qp == "lista":
+    st.session_state["page"] = "lista"
+elif page_qp == "crypto":
+    st.session_state["page"] = "crypto"
 
 # Validación profunda por link (sin login)
 if codigo_qp:
@@ -800,7 +830,7 @@ if (
     b1, b2 = st.columns(2)
     with b1:
         if st.button("Validar código", use_container_width=True, type="secondary"):
-            st.session_state["page"] = "validar_publico"
+            st.session_state["page"] = "inicio"
             st.rerun()
     with b2:
         if st.button("Volver al inicio", use_container_width=True, type="secondary"):
@@ -825,70 +855,53 @@ if (
 
 # ── Páginas ─────────────────────────────────────────────────────────────────
 if page == "inicio":
-    nav_bar("Inicio")
+    # Home público: validar + clave pública + últimos emitidos (VALID)
+    nav_bar("Validar")
     hero_home()
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Emitir certificado", type="primary", use_container_width=True):
-            st.session_state["page"] = "emitir"
-            st.rerun()
-    with c2:
-        if st.button("Validar código", type="secondary", use_container_width=True):
-            st.session_state["page"] = "validar_publico"
-            st.rerun()
 
     if "seed_error" in st.session_state:
         st.error(f"Error en LLAVE_PRIVADA: {st.session_state['seed_error']}")
 
+    panel_validar_codigo(allow_revoke=bool(st.session_state.get("autenticado")))
     panel_pubkey()
     panel_recent()
 
-    # links admin
+    st.markdown("<br/>", unsafe_allow_html=True)
+    # Emisión y admin solo detrás de login
     if login_requerido and st.session_state["autenticado"]:
-        a1, a2, a3 = st.columns(3)
+        a1, a2, a3, a4 = st.columns(4)
         with a1:
-            if st.button("Lista", use_container_width=True):
-                st.session_state["page"] = "lista"
+            if st.button("Emitir certificado", type="primary", use_container_width=True):
+                st.session_state["page"] = "emitir"
                 st.rerun()
         with a2:
+            if st.button("Lista alumnos", use_container_width=True):
+                st.session_state["page"] = "lista"
+                st.rerun()
+        with a3:
             if st.button("Criptografía", use_container_width=True):
                 st.session_state["page"] = "crypto"
                 st.rerun()
-        with a3:
+        with a4:
             if st.button("Cerrar sesión", use_container_width=True):
                 st.session_state["autenticado"] = False
                 st.rerun()
     elif login_requerido:
-        if st.button("Entrar como institución", type="secondary", use_container_width=True):
+        if st.button("Acceso institución (emitir)", type="secondary", use_container_width=True):
+            st.session_state["page"] = "emitir"
+            st.rerun()
+    else:
+        # Sin secrets de login: emitir disponible pero no es el home
+        if st.button("Emitir certificado", type="secondary", use_container_width=True):
             st.session_state["page"] = "emitir"
             st.rerun()
 
     foot()
 
 elif page in {"validar", "validar_publico"}:
-    nav_bar("Validar")
-    st.markdown(
-        f"""
-        <p class="eyebrow">{certificates.institution_name()}</p>
-        <h1 class="hero-title">Validar certificado</h1>
-        <p class="lead">Ingresa el código (ej. CERT-XXXX-XXXX-XXXX).</p>
-        """,
-        unsafe_allow_html=True,
-    )
-    codigo = st.text_input("Código", placeholder="CERT-....", label_visibility="collapsed")
-    colv1, colv2 = st.columns(2)
-    with colv1:
-        go = st.button("Verificar firma", type="primary", use_container_width=True)
-    with colv2:
-        if st.button("← Inicio", type="secondary", use_container_width=True):
-            st.session_state["page"] = "inicio"
-            st.rerun()
-    if go and codigo.strip():
-        show_result_panel(
-            certificates.validate(codigo.strip().upper()),
-            allow_revoke=bool(st.session_state.get("autenticado")),
-        )
-    foot()
+    # Compatibilidad: redirigir a la vista pública unificada
+    st.session_state["page"] = "inicio"
+    st.rerun()
 
 elif page == "emitir":
     nav_bar("Emitir")
