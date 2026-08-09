@@ -546,67 +546,82 @@ def inject_web_look() -> None:
           box-shadow: 0 18px 50px rgba(20, 33, 28, 0.08);
         }
 
-        /* ── Campos de datos = mismo verde medio del key-box (inicio) ── */
+        /* ── Campos de datos (sin que el texto se salga del recuadro) ── */
+        [data-testid="stTextInput"] [data-baseweb="base-input"],
+        [data-testid="stTextArea"] [data-baseweb="base-input"],
+        [data-testid="stNumberInput"] [data-baseweb="base-input"],
+        [data-testid="stTextInput"] > div > div,
+        [data-testid="stTextArea"] > div > div,
+        [data-testid="stNumberInput"] > div > div {
+          background-color: #e9efeb !important;
+          border: 1.5px solid #c9d5cc !important;
+          border-radius: 10px !important;
+          outline: none !important;
+          box-sizing: border-box !important;
+          overflow: hidden !important;
+          max-width: 100% !important;
+        }
+
         [data-testid="stTextInput"] input,
         [data-testid="stTextArea"] textarea,
         [data-testid="stNumberInput"] input,
         .stTextInput input,
         .stTextArea textarea,
         .stNumberInput input {
-          background-color: #e9efeb !important;
+          background-color: transparent !important;
           color: #14211c !important;
-          border: 1.5px solid #c9d5cc !important;
+          border: none !important;
           border-radius: 10px !important;
           min-height: 2.75rem !important;
-          padding: 0.55rem 0.8rem !important;
+          max-width: 100% !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+          padding: 0.55rem 0.85rem !important;
+          /* espacio al ojo (mostrar clave) y truncar placeholder largo */
+          padding-right: 2.75rem !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
           box-shadow: none !important;
         }
         [data-testid="stTextArea"] textarea,
         .stTextArea textarea {
           min-height: 5.5rem !important;
+          white-space: pre-wrap !important;
+          padding-right: 0.85rem !important;
+          overflow-y: auto !important;
         }
 
-        /* Contenedor BaseWeb (Streamlit envuelve el input) */
-        [data-testid="stTextInput"] [data-baseweb="base-input"],
-        [data-testid="stTextArea"] [data-baseweb="base-input"],
-        [data-testid="stNumberInput"] [data-baseweb="base-input"],
-        [data-testid="stTextInput"] > div > div,
-        [data-testid="stTextArea"] > div > div,
-        [data-testid="stNumberInput"] > div > div,
-        div[data-baseweb="input"],
-        div[data-baseweb="input"] > div,
-        div[data-baseweb="base-input"],
-        div[data-baseweb="textarea"],
-        div[data-baseweb="textarea"] > div {
-          background-color: #e9efeb !important;
-          border: 1.5px solid #c9d5cc !important;
-          border-radius: 10px !important;
-          outline: none !important;
+        /* Placeholder y “Press Enter…” de Streamlit: no se salen del cuadro */
+        [data-testid="stTextInput"] input::placeholder,
+        [data-testid="stTextArea"] textarea::placeholder,
+        [data-testid="stNumberInput"] input::placeholder {
+          color: #6b7a74 !important;
+          opacity: 1 !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+        }
+
+        /* Botón ojo de password: dentro del recuadro, no pisa el texto */
+        [data-testid="stTextInput"] button,
+        [data-testid="stTextInput"] [data-baseweb="input"] button,
+        [data-testid="stTextInput"] button[kind="minimal"],
+        [data-testid="stTextInput"] [data-testid="stTextInputShowPasswordButton"],
+        [data-testid="stTextInput"] [title*="Show"],
+        [data-testid="stTextInput"] [title*="Hide"] {
+          flex-shrink: 0 !important;
+          z-index: 2 !important;
         }
 
         /* Focus: un poco más claro + borde verde acento */
-        [data-testid="stTextInput"] input:focus,
-        [data-testid="stTextArea"] textarea:focus,
-        [data-testid="stNumberInput"] input:focus,
         [data-testid="stTextInput"]:focus-within [data-baseweb="base-input"],
         [data-testid="stTextArea"]:focus-within [data-baseweb="base-input"],
         [data-testid="stNumberInput"]:focus-within [data-baseweb="base-input"],
         [data-testid="stTextInput"]:focus-within > div > div,
-        [data-testid="stTextArea"]:focus-within > div > div,
-        div[data-baseweb="input"]:focus-within,
-        div[data-baseweb="input"] > div:focus-within,
-        div[data-baseweb="base-input"]:focus-within,
-        div[data-baseweb="textarea"] > div:focus-within {
+        [data-testid="stTextArea"]:focus-within > div > div {
           border-color: #0d6e56 !important;
           box-shadow: 0 0 0 3px rgba(13, 110, 86, 0.18) !important;
-          background-color: #e9efeb !important;
-        }
-
-        /* Quitar borde gris interno de Streamlit; el fondo verde lo lleva el contenedor */
-        [data-testid="stTextInput"] div[data-baseweb="base-input"] input,
-        [data-testid="stTextArea"] div[data-baseweb="base-input"] textarea,
-        [data-testid="stNumberInput"] div[data-baseweb="base-input"] input {
-          border: none !important;
           background-color: #e9efeb !important;
         }
 
