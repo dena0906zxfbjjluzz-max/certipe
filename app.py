@@ -1,6 +1,5 @@
 """
-CertiPE — Emisor / validador de certificados Ed25519.
-Streamlit + secrets + PDF + QR + validación pública (UI tipo ventana).
+CertiPE en Streamlit — misma cara que la web local (colores y layout).
 """
 
 from __future__ import annotations
@@ -13,12 +12,13 @@ import streamlit as st
 from app import certificates, crypto
 from app import pdf_cert
 
-APP_VERSION = "1.1 · PDF · QR · validación pública"
+APP_VERSION = "1.2 · look web local"
 
 st.set_page_config(
     page_title="CertiPE · Certificados",
     page_icon="📜",
-    layout="wide",
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -96,106 +96,210 @@ def verify_url(cert_id: str) -> str:
     return f"?codigo={quote(cert_id)}"
 
 
-def inject_styles() -> None:
+def inject_web_look() -> None:
+    """Estilos calcados de static/styles.css (web local)."""
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700;9..40,800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-        html, body, [class*="css"] { font-family: "DM Sans", sans-serif; }
-        .block-container { padding-top: 1.2rem; max-width: 980px; }
-        code, .stCode { font-family: "IBM Plex Mono", monospace !important; }
-        div[data-testid="stMetricValue"] { font-family: "IBM Plex Mono", monospace; }
+        :root {
+          --ink: #14211c;
+          --muted: #5b6b63;
+          --ok: #1f6b45;
+          --ok-bg: #e5f5eb;
+          --accent: #0d6e56;
+          --accent-2: #c46a1c;
+          --line: #c9d5cc;
+        }
 
-        .hero-card {
-            background: linear-gradient(135deg, #0d6e56 0%, #145a4a 55%, #1a3d34 100%);
-            color: #f4faf7;
-            border-radius: 18px;
-            padding: 1.4rem 1.5rem 1.5rem;
-            margin: 0 0 1.2rem 0;
-            box-shadow: 0 14px 40px rgba(13, 110, 86, 0.28);
-            border: 1px solid rgba(255,255,255,0.12);
+        html, body, [class*="css"] {
+          font-family: "DM Sans", system-ui, sans-serif !important;
+          color: var(--ink);
         }
-        .hero-card h1 {
-            margin: 0 0 0.35rem 0;
-            font-size: 1.85rem;
-            letter-spacing: -0.03em;
-            color: #fff !important;
+
+        /* Fondo como la web local */
+        [data-testid="stAppViewContainer"] {
+          background:
+            radial-gradient(900px 500px at 10% -10%, rgba(196, 106, 28, 0.18), transparent 55%),
+            radial-gradient(800px 480px at 90% 0%, rgba(13, 110, 86, 0.18), transparent 50%),
+            linear-gradient(180deg, #eef4ef 0%, #f7f5f0 45%, #e7efe9 100%) !important;
         }
-        .hero-card p {
-            margin: 0.25rem 0;
-            opacity: 0.92;
-            color: #e8f5ef !important;
+        [data-testid="stHeader"] { background: transparent !important; }
+        [data-testid="stToolbar"] { right: 1rem; }
+
+        .block-container {
+          padding-top: 1rem !important;
+          padding-bottom: 2.5rem !important;
+          max-width: 920px !important;
         }
-        .hero-card .chip {
-            display: inline-block;
-            background: rgba(255,255,255,0.14);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 999px;
-            padding: 0.18rem 0.7rem;
-            font-size: 0.78rem;
-            font-weight: 700;
-            margin-bottom: 0.7rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
+
+        /* Ocultar chrome de Streamlit sobrante */
+        #MainMenu { visibility: hidden; }
+        footer { visibility: hidden; }
+
+        .top-nav {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.8rem;
         }
-        .window-card {
-            background: #ffffff;
-            border: 1px solid #cfdcd5;
-            border-radius: 16px;
-            padding: 0;
-            margin: 0.4rem 0 1.2rem 0;
-            box-shadow: 0 16px 48px rgba(20, 33, 28, 0.10);
-            overflow: hidden;
+        .brand {
+          font-weight: 700;
+          letter-spacing: -0.03em;
+          font-size: 1.25rem;
+          color: var(--ink);
         }
-        .window-bar {
-            background: #eef4f0;
-            border-bottom: 1px solid #d5e0da;
-            padding: 0.55rem 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.45rem;
-            font-size: 0.82rem;
-            font-weight: 700;
-            color: #3d5249;
+        .nav-links { color: var(--muted); font-weight: 600; font-size: 0.95rem; }
+
+        .eyebrow {
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: var(--accent-2);
+          margin: 0 0 0.4rem 0;
         }
-        .dot {
-            width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+        .hero-title {
+          font-size: clamp(1.8rem, 4vw, 2.55rem);
+          letter-spacing: -0.04em;
+          line-height: 1.15;
+          font-weight: 700;
+          color: var(--ink);
+          margin: 0.2rem 0 0.75rem 0;
         }
-        .dot.r { background: #e35d5d; }
-        .dot.y { background: #e3b35d; }
-        .dot.g { background: #4caf7a; }
-        .window-body {
-            padding: 1.1rem 1.2rem 1.25rem;
+        .lead {
+          color: var(--muted);
+          font-size: 1.05rem;
+          max-width: 38rem;
+          margin: 0 0 1.1rem 0;
+          line-height: 1.45;
         }
-        .window-body h2 {
-            margin: 0 0 0.35rem 0;
-            font-size: 1.35rem;
-            color: #14211c;
-            letter-spacing: -0.02em;
+
+        .panel {
+          background: rgba(255, 255, 255, 0.88);
+          border: 1px solid rgba(201, 213, 204, 0.9);
+          border-radius: 18px;
+          padding: 1.25rem 1.4rem;
+          box-shadow: 0 18px 50px rgba(20, 33, 28, 0.08);
+          backdrop-filter: blur(8px);
+          margin: 0 0 1rem 0;
         }
-        .window-body .muted {
-            color: #5b6b63;
-            margin: 0 0 0.9rem 0;
-            font-size: 0.95rem;
+        .panel h2 {
+          margin: 0 0 0.45rem 0;
+          font-size: 1.2rem;
+          color: var(--ink);
         }
-        .welcome-box {
-            background: #e8f6ef;
-            border: 1px solid #b7 rec8c5;
-            border-left: 5px solid #0d6e56;
-            border-radius: 12px;
-            padding: 0.95rem 1.1rem;
-            margin: 0 0 1rem 0;
+        .panel .muted { color: var(--muted); font-size: 0.95rem; margin: 0 0 0.7rem 0; }
+
+        .key-box {
+          display: block;
+          word-break: break-all;
+          background: #e9efeb;
+          padding: 0.8rem 1rem;
+          border-radius: 10px;
+          font-family: "IBM Plex Mono", ui-monospace, monospace;
+          font-size: 0.8rem;
+          color: var(--ink);
+          margin-top: 0.5rem;
         }
-        .welcome-box strong { color: #0d6e56; }
-        .welcome-box p { margin: 0.25rem 0 0 0; color: #2f463d; font-size: 0.95rem; }
-        .version-tag {
-            font-size: 0.75rem;
-            color: #6b7c74;
-            margin-top: 0.15rem;
+
+        .list-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.75rem 0;
+          border-bottom: 1px solid var(--line);
+          font-size: 0.95rem;
+        }
+        .list-row:last-child { border-bottom: none; }
+        .list-id {
+          font-family: "IBM Plex Mono", monospace;
+          font-weight: 600;
+          color: var(--accent);
+          font-size: 0.9rem;
+        }
+        .list-meta { color: var(--muted); flex: 1; }
+        .tag {
+          font-size: 0.72rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          padding: 0.2rem 0.5rem;
+          border-radius: 6px;
+          background: var(--ok-bg);
+          color: var(--ok);
+          white-space: nowrap;
+        }
+        .tag.revoked { background: #f8e8e8; color: #8b2e2e; }
+
+        .foot {
+          text-align: center;
+          color: var(--muted);
+          font-size: 0.85rem;
+          margin-top: 1.5rem;
+        }
+
+        /* Botones Streamlit → acento web */
+        div.stButton > button[kind="primary"],
+        div.stButton > button[data-testid="baseButton-primary"] {
+          background-color: #0d6e56 !important;
+          border-color: #0d6e56 !important;
+          color: #fff !important;
+          border-radius: 10px !important;
+          font-weight: 700 !important;
+        }
+        div.stButton > button[kind="secondary"],
+        div.stButton > button[data-testid="baseButton-secondary"] {
+          background: transparent !important;
+          border: 1px solid #c9d5cc !important;
+          color: #14211c !important;
+          border-radius: 10px !important;
+          font-weight: 700 !important;
+        }
+        div[data-testid="stForm"] {
+          background: rgba(255,255,255,0.88);
+          border: 1px solid rgba(201, 213, 204, 0.9);
+          border-radius: 18px;
+          padding: 1rem 1.1rem 0.4rem;
+          box-shadow: 0 18px 50px rgba(20, 33, 28, 0.08);
+        }
+        code, .stCode code {
+          font-family: "IBM Plex Mono", monospace !important;
+        }
+        [data-testid="stMetricValue"] {
+          font-family: "IBM Plex Mono", monospace;
         }
         </style>
-        """.replace("#b7 rec8c5", "#b7d8c5"),
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def nav_bar(page: str) -> None:
+    st.markdown(
+        f"""
+        <div class="top-nav">
+          <div class="brand">CertiPE</div>
+          <div class="nav-links">{page}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def hero_home() -> None:
+    inst = certificates.institution_name()
+    st.markdown(
+        f"""
+        <p class="eyebrow">{inst}</p>
+        <h1 class="hero-title">Certificados firmados con Ed25519</h1>
+        <p class="lead">
+          Emite un certificado, fírmalo con la clave de la institución y compártelo.
+          Cualquiera puede verificar si es auténtico o si lo alteraron.
+        </p>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -228,12 +332,10 @@ def show_result_panel(result: dict, *, allow_revoke: bool = False) -> None:
     link = verify_url(c["id"])
     st.markdown("**Link de verificación**")
     st.code(link, language=None)
-
     try:
         st.image(pdf_cert.qr_png_bytes(link), caption="QR de validación", width=180)
     except Exception:
         pass
-
     try:
         pdf_bytes = pdf_cert.build_certificate_pdf(c, link)
         st.download_button(
@@ -247,296 +349,258 @@ def show_result_panel(result: dict, *, allow_revoke: bool = False) -> None:
         st.warning(f"PDF no disponible: {e}")
 
     if allow_revoke and c.get("status") == "valid":
-        if st.button("Revocar este certificado", type="secondary", key=f"rev_panel_{c['id']}"):
+        if st.button("Revocar este certificado", type="secondary", key=f"rev_{c['id']}"):
             certificates.revoke(c["id"])
-            st.warning("Certificado revocado.")
+            st.warning("Revocado.")
             st.rerun()
 
 
-def window_open(title: str, muted: str = "") -> None:
+def panel_pubkey() -> None:
+    fp = crypto.public_key_fingerprint()
+    pub = crypto.public_key_b64()
     st.markdown(
         f"""
-        <div class="window-card">
-          <div class="window-bar">
-            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-            <span style="margin-left:0.4rem">{title}</span>
-          </div>
-          <div class="window-body">
-            <h2>{title}</h2>
-            <p class="muted">{muted}</p>
-          </div>
+        <div class="panel">
+          <h2>Clave pública de la institución</h2>
+          <p class="muted">Huella: <code>{fp}</code>. La privada nunca sale del servidor.</p>
+          <div class="key-box">{pub}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def page_public_validate(prefill: str = "", *, standalone: bool = True) -> None:
-    if standalone:
-        st.markdown(
-            f"""
-            <div class="hero-card">
-              <div class="chip">Verificación pública · sin login</div>
-              <h1>CertiPE</h1>
-              <p>{certificates.institution_name()}</p>
-              <p class="version-tag" style="color:#cfe8dc!important;opacity:0.9">{APP_VERSION}</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
+def panel_recent() -> None:
+    items = certificates.list_all()[:12]
+    rows = ""
+    if not items:
+        rows = '<div class="list-row"><span class="list-meta">Aún no hay certificados.</span></div>'
+    else:
+        for c in items:
+            status = c.get("status") or "valid"
+            tag_cls = "tag revoked" if status == "revoked" else "tag"
+            rows += (
+                f'<div class="list-row">'
+                f'<span class="list-id">{c.get("id")}</span>'
+                f'<span class="list-meta">{c.get("holder_name")} · {c.get("course_title")}</span>'
+                f'<span class="{tag_cls}">{status}</span>'
+                f"</div>"
+            )
     st.markdown(
         f"""
-        <div class="window-card">
-          <div class="window-bar">
-            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-            <span style="margin-left:0.4rem">Validar certificado</span>
-          </div>
-          <div class="window-body">
-            <div class="welcome-box">
-              <strong>Bienvenido</strong>
-              <p>Ingresa el código del certificado (ej. CERT-XXXX-XXXX-XXXX).
-              Verificamos firma Ed25519 e integridad del documento.</p>
-            </div>
-          </div>
+        <div class="panel">
+          <h2>Últimos emitidos</h2>
+          {rows}
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    with st.container(border=True):
-        st.subheader("Código de verificación")
-        codigo = st.text_input(
-            "Código del certificado",
-            value=prefill,
-            placeholder="CERT-XXXX-XXXX-XXXX",
-            key="public_codigo",
-            label_visibility="collapsed",
-        )
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            go = st.button("Verificar firma", type="primary", use_container_width=True)
-        with col2:
-            if not standalone and st.button("Volver al panel", use_container_width=True):
-                st.session_state["modo_publico"] = False
-                st.query_params.clear()
-                st.rerun()
 
-        if go or prefill:
-            cid = (codigo or prefill or "").strip().upper()
-            if cid:
-                st.divider()
-                show_result_panel(certificates.validate(cid), allow_revoke=False)
+def foot() -> None:
+    st.markdown(
+        f'<p class="foot">MVP · Ed25519 · {APP_VERSION} · demo institucional</p>',
+        unsafe_allow_html=True,
+    )
 
 
+# ── bootstrap ───────────────────────────────────────────────────────────────
 bootstrap_secrets()
 crypto.ensure_keys()
+inject_web_look()
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
-if "modo_publico" not in st.session_state:
-    st.session_state["modo_publico"] = False
+if "page" not in st.session_state:
+    st.session_state["page"] = "inicio"
 
-inject_styles()
-
-# ── Validación pública ──────────────────────────────────────────────────────
 qp = st.query_params
 codigo_qp = (qp.get("codigo") or qp.get("v") or "").strip().upper()
-public_mode = (qp.get("public") or qp.get("mode") or "").lower() in {
-    "1",
-    "true",
-    "validar",
-    "validate",
-}
-if public_mode:
-    st.session_state["modo_publico"] = True
+if (qp.get("public") or qp.get("mode") or "").lower() in {"1", "true", "validar", "validate"}:
+    st.session_state["page"] = "validar_publico"
+if qp.get("page") == "emitir":
+    st.session_state["page"] = "emitir"
+if qp.get("page") == "validar":
+    st.session_state["page"] = "validar"
 
+# Validación profunda por link (sin login)
 if codigo_qp:
+    nav_bar("Validar")
     st.markdown(
         f"""
-        <div class="hero-card">
-          <div class="chip">Resultado de verificación</div>
-          <h1>CertiPE</h1>
-          <p>{certificates.institution_name()}</p>
-          <p>Código: <strong style="color:#fff">{codigo_qp}</strong></p>
-        </div>
+        <p class="eyebrow">{certificates.institution_name()}</p>
+        <h1 class="hero-title">Verificación pública</h1>
+        <p class="lead">Código <code>{codigo_qp}</code></p>
         """,
         unsafe_allow_html=True,
     )
-    with st.container(border=True):
+    with st.container():
         show_result_panel(certificates.validate(codigo_qp), allow_revoke=False)
-    st.stop()
-
-if st.session_state["modo_publico"] or public_mode:
-    page_public_validate(standalone=True)
+    foot()
     st.stop()
 
 usuario_cfg, clave_cfg, err_creds = cargar_credenciales()
 login_requerido = usuario_cfg is not None and clave_cfg is not None
 
-# ── Login ───────────────────────────────────────────────────────────────────
-if login_requerido and not st.session_state["autenticado"]:
+# Login solo para emitir / lista / admin — validar y ver inicio pueden ser mixtos
+need_login_pages = {"emitir", "lista", "crypto"}
+page = st.session_state["page"]
+
+if (
+    login_requerido
+    and not st.session_state["autenticado"]
+    and page in need_login_pages
+):
+    nav_bar("Acceso")
     st.markdown(
         f"""
-        <div class="hero-card">
-          <div class="chip">CertiPE · {APP_VERSION}</div>
-          <h1>Panel de la institución</h1>
-          <p>{certificates.institution_name()}</p>
-          <p>Emite certificados firmados con Ed25519 y compártelos con QR o PDF.</p>
-        </div>
+        <p class="eyebrow">{certificates.institution_name()}</p>
+        <h1 class="hero-title">Acceso institución</h1>
+        <p class="lead">Inicia sesión para emitir certificados. La validación pública no pide clave.</p>
         """,
         unsafe_allow_html=True,
     )
+    b1, b2 = st.columns(2)
+    with b1:
+        if st.button("Validar código", use_container_width=True, type="secondary"):
+            st.session_state["page"] = "validar_publico"
+            st.rerun()
+    with b2:
+        if st.button("Volver al inicio", use_container_width=True, type="secondary"):
+            st.session_state["page"] = "inicio"
+            st.rerun()
 
-    # Cuadro bienvenida + acceso a validación pública
-    st.markdown(
-        """
-        <div class="window-card">
-          <div class="window-bar">
-            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-            <span style="margin-left:0.4rem">Validación pública</span>
-          </div>
-          <div class="window-body">
-            <div class="welcome-box">
-              <strong>¿Solo quieres comprobar un certificado?</strong>
-              <p>No necesitas usuario ni clave. Abre el validador público y pega el código CERT-…</p>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("Abrir validación pública", type="primary", use_container_width=True):
-        st.session_state["modo_publico"] = True
-        st.query_params["public"] = "validar"
-        st.rerun()
-
-    st.markdown("")
-    with st.container(border=True):
-        st.subheader("Acceso institución")
-        if err_creds:
-            st.error(err_creds)
-        with st.form("login"):
-            u = st.text_input("Usuario")
-            p = st.text_input("Clave", type="password")
-            ok = st.form_submit_button("Entrar", type="primary", use_container_width=True)
-            if ok:
-                if u.strip() == usuario_cfg and p == clave_cfg:
-                    st.session_state["autenticado"] = True
-                    st.session_state["modo_publico"] = False
-                    st.rerun()
-                else:
-                    st.error("Usuario o clave incorrectos.")
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    if err_creds:
+        st.error(err_creds)
+    with st.form("login"):
+        u = st.text_input("Usuario")
+        p = st.text_input("Clave", type="password")
+        if st.form_submit_button("Entrar", type="primary", use_container_width=True):
+            if u.strip() == usuario_cfg and p == clave_cfg:
+                st.session_state["autenticado"] = True
+                st.session_state["page"] = "emitir"
+                st.rerun()
+            st.error("Usuario o clave incorrectos.")
+    st.markdown("</div>", unsafe_allow_html=True)
+    foot()
     st.stop()
 
-# ── App privada ─────────────────────────────────────────────────────────────
-st.markdown(
-    f"""
-    <div class="hero-card">
-      <div class="chip">CertiPE · {APP_VERSION}</div>
-      <h1>Panel institución</h1>
-      <p>{certificates.institution_name()} · firmas Ed25519 · huella {crypto.public_key_fingerprint()}</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# ── Páginas ─────────────────────────────────────────────────────────────────
+if page == "inicio":
+    nav_bar("Inicio")
+    hero_home()
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Emitir certificado", type="primary", use_container_width=True):
+            st.session_state["page"] = "emitir"
+            st.rerun()
+    with c2:
+        if st.button("Validar código", type="secondary", use_container_width=True):
+            st.session_state["page"] = "validar_publico"
+            st.rerun()
 
-# Banner validación pública tipo ventana (visible, no solo sidebar)
-st.markdown(
-    """
-    <div class="window-card">
-      <div class="window-bar">
-        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span style="margin-left:0.4rem">Validación pública</span>
-      </div>
-      <div class="window-body">
-        <div class="welcome-box">
-          <strong>Comparte el validador con empresas / alumnos</strong>
-          <p>Pueden verificar autenticidad sin entrar al panel. El link usa
-          <code>?public=validar</code> o <code>?codigo=CERT-…</code>.</p>
-        </div>
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-bp1, bp2 = st.columns([1, 1])
-with bp1:
-    if st.button("Abrir validación pública", type="primary", use_container_width=True, key="btn_pub_main"):
-        st.session_state["modo_publico"] = True
-        st.query_params["public"] = "validar"
-        st.rerun()
-with bp2:
-    pub_link = f"{app_base_url()}/?public=validar" if app_base_url() else "?public=validar"
-    st.code(pub_link, language=None)
+    if "seed_error" in st.session_state:
+        st.error(f"Error en LLAVE_PRIVADA: {st.session_state['seed_error']}")
 
-if "seed_error" in st.session_state:
-    st.error(f"Error en LLAVE_PRIVADA: {st.session_state['seed_error']}")
+    panel_pubkey()
+    panel_recent()
 
-tab_emitir, tab_validar, tab_lista, tab_crypto = st.tabs(
-    ["Emitir", "Validar", "Lista", "Criptografía"]
-)
+    # links admin
+    if login_requerido and st.session_state["autenticado"]:
+        a1, a2, a3 = st.columns(3)
+        with a1:
+            if st.button("Lista", use_container_width=True):
+                st.session_state["page"] = "lista"
+                st.rerun()
+        with a2:
+            if st.button("Criptografía", use_container_width=True):
+                st.session_state["page"] = "crypto"
+                st.rerun()
+        with a3:
+            if st.button("Cerrar sesión", use_container_width=True):
+                st.session_state["autenticado"] = False
+                st.rerun()
+    elif login_requerido:
+        if st.button("Entrar como institución", type="secondary", use_container_width=True):
+            st.session_state["page"] = "emitir"
+            st.rerun()
 
-with tab_emitir:
-    with st.container(border=True):
-        st.subheader("Emitir certificado")
-        with st.form("emitir"):
-            c1, c2 = st.columns(2)
-            with c1:
-                holder_name = st.text_input("Nombre del titulado", placeholder="Ana López")
-                holder_doc = st.text_input("Documento (DNI / CE)", placeholder="71234567")
-                course_title = st.text_input("Curso / programa", placeholder="Introducción a Python")
-            with c2:
-                course_hours = st.number_input(
-                    "Horas (0 = no indicar)", min_value=0, max_value=10000, value=0
+    foot()
+
+elif page in {"validar", "validar_publico"}:
+    nav_bar("Validar")
+    st.markdown(
+        f"""
+        <p class="eyebrow">{certificates.institution_name()}</p>
+        <h1 class="hero-title">Validar certificado</h1>
+        <p class="lead">Ingresa el código (ej. CERT-XXXX-XXXX-XXXX).</p>
+        """,
+        unsafe_allow_html=True,
+    )
+    codigo = st.text_input("Código", placeholder="CERT-....", label_visibility="collapsed")
+    colv1, colv2 = st.columns(2)
+    with colv1:
+        go = st.button("Verificar firma", type="primary", use_container_width=True)
+    with colv2:
+        if st.button("← Inicio", type="secondary", use_container_width=True):
+            st.session_state["page"] = "inicio"
+            st.rerun()
+    if go and codigo.strip():
+        show_result_panel(
+            certificates.validate(codigo.strip().upper()),
+            allow_revoke=bool(st.session_state.get("autenticado")),
+        )
+    foot()
+
+elif page == "emitir":
+    nav_bar("Emitir")
+    st.markdown(
+        f"""
+        <p class="eyebrow">{certificates.institution_name()}</p>
+        <h1 class="hero-title">Emitir certificado</h1>
+        <p class="lead">La institución firmará el documento con Ed25519.</p>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.form("emitir"):
+        holder_name = st.text_input("Nombre del titulado", placeholder="Ana López")
+        holder_doc = st.text_input("Documento (DNI / CE)", placeholder="12345678")
+        course_title = st.text_input("Curso / programa", placeholder="Introducción a Python")
+        course_hours = st.number_input("Horas (opcional)", min_value=0, max_value=10000, value=0)
+        issued_by = st.text_input("Firmado por (opcional)", placeholder="Director académico")
+        notes = st.text_area("Notas (opcional)", height=70)
+        submitted = st.form_submit_button("Firmar y emitir", type="primary", use_container_width=True)
+        if submitted:
+            if not holder_name.strip() or not holder_doc.strip() or not course_title.strip():
+                st.warning("Completa nombre, documento y curso.")
+            else:
+                rec = certificates.issue(
+                    holder_name=holder_name,
+                    holder_doc=holder_doc,
+                    course_title=course_title,
+                    course_hours=int(course_hours) or None,
+                    issued_by=issued_by or None,
+                    notes=notes or None,
                 )
-                issued_by = st.text_input("Firmado por", placeholder="Director académico")
-                notes = st.text_area("Notas", height=80)
-            submit = st.form_submit_button("Firmar y emitir", type="primary")
-            if submit:
-                if not holder_name.strip() or not holder_doc.strip() or not course_title.strip():
-                    st.warning("Completa nombre, documento y curso.")
-                else:
-                    rec = certificates.issue(
-                        holder_name=holder_name,
-                        holder_doc=holder_doc,
-                        course_title=course_title,
-                        course_hours=int(course_hours) or None,
-                        issued_by=issued_by or None,
-                        notes=notes or None,
-                    )
-                    st.session_state["last_cert"] = rec
+                st.session_state["last_cert"] = rec
+
+    if st.button("← Inicio", type="secondary"):
+        st.session_state["page"] = "inicio"
+        st.rerun()
 
     if st.session_state.get("last_cert"):
         rec = st.session_state["last_cert"]
-        st.markdown(
-            """
-            <div class="window-card">
-              <div class="window-bar">
-                <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-                <span style="margin-left:0.4rem">Certificado emitido</span>
-              </div>
-              <div class="window-body">
-                <div class="welcome-box">
-                  <strong>Listo</strong>
-                  <p>Descarga el PDF, copia el link o muestra el QR al alumno.</p>
-                </div>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
         st.success(f"Emitido: **{rec['id']}**")
         link = verify_url(rec["id"])
-        st.markdown("**Link de verificación**")
         st.code(link, language=None)
-        col_a, col_b = st.columns([1, 2])
-        with col_a:
+        ca, cb = st.columns([1, 2])
+        with ca:
             try:
-                st.image(pdf_cert.qr_png_bytes(link), width=180)
+                st.image(pdf_cert.qr_png_bytes(link), width=160)
             except Exception as e:  # noqa: BLE001
-                st.caption(f"QR: {e}")
-        with col_b:
+                st.caption(str(e))
+        with cb:
             try:
                 pdf_bytes = pdf_cert.build_certificate_pdf(rec, link)
                 st.download_button(
@@ -548,84 +612,48 @@ with tab_emitir:
                     key="pdf_last",
                 )
             except Exception as e:  # noqa: BLE001
-                st.warning(f"PDF no disponible: {e}")
-            st.json(
-                {
-                    "id": rec["id"],
-                    "holder_name": rec["holder_name"],
-                    "course_title": rec["course_title"],
-                    "payload_hash": rec["payload_hash"],
-                    "status": rec["status"],
-                }
-            )
+                st.warning(f"PDF: {e}")
+    foot()
 
-with tab_validar:
-    with st.container(border=True):
-        st.subheader("Validar certificado (panel)")
-        codigo = st.text_input("Código", placeholder="CERT-XXXX-XXXX-XXXX", key="codigo_val")
-        if st.button("Verificar firma", type="primary", key="btn_val") or codigo:
-            cid = (codigo or "").strip().upper()
-            if cid:
-                show_result_panel(certificates.validate(cid), allow_revoke=True)
-
-with tab_lista:
-    st.subheader("Certificados emitidos")
-    items = certificates.list_all()
-    if not items:
-        st.info("Aún no hay certificados. Emite uno en la pestaña Emitir.")
-    else:
-        for c in items:
-            with st.expander(f"{c['id']} · {c['holder_name']} · {c.get('status')}"):
-                st.write(
-                    {
-                        "curso": c.get("course_title"),
-                        "documento": c.get("holder_doc"),
-                        "emitido": c.get("issued_at"),
-                        "hash": c.get("payload_hash"),
-                    }
-                )
-                link = verify_url(c["id"])
-                st.code(link, language=None)
-                b1, b2 = st.columns(2)
-                with b1:
-                    try:
-                        pdf_bytes = pdf_cert.build_certificate_pdf(c, link)
-                        st.download_button(
-                            "PDF",
-                            data=pdf_bytes,
-                            file_name=f"{c['id']}.pdf",
-                            mime="application/pdf",
-                            key=f"pdf_list_{c['id']}",
-                        )
-                    except Exception:
-                        pass
-                with b2:
-                    if c.get("status") == "valid" and st.button("Revocar", key=f"rev_{c['id']}"):
-                        certificates.revoke(c["id"])
-                        st.rerun()
-
-with tab_crypto:
-    with st.container(border=True):
-        st.subheader("Clave pública de la institución")
-        st.caption("Cualquiera puede usarla para verificar firmas. La privada va en secrets.")
-        st.code(crypto.public_key_b64(), language=None)
-        st.write(
-            {
-                "alg": "Ed25519",
-                "fingerprint": crypto.public_key_fingerprint(),
-                "public_key_hex": crypto.public_key_hex(),
-                "app_version": APP_VERSION,
-                "public_base_url": app_base_url() or "(auto Host)",
-            }
-        )
-
-with st.sidebar:
-    st.markdown(f"**CertiPE** `{APP_VERSION}`")
-    if login_requerido and st.session_state["autenticado"]:
-        if st.button("Cerrar sesión", use_container_width=True):
-            st.session_state["autenticado"] = False
-            st.rerun()
-    if st.button("Validación pública", type="primary", use_container_width=True, key="side_pub"):
-        st.session_state["modo_publico"] = True
-        st.query_params["public"] = "validar"
+elif page == "lista":
+    nav_bar("Lista")
+    st.markdown('<h1 class="hero-title">Certificados emitidos</h1>', unsafe_allow_html=True)
+    if st.button("← Inicio", type="secondary"):
+        st.session_state["page"] = "inicio"
         st.rerun()
+    panel_recent()
+    for c in certificates.list_all():
+        with st.expander(f"{c['id']} · {c.get('status')}"):
+            link = verify_url(c["id"])
+            st.code(link, language=None)
+            try:
+                st.download_button(
+                    "PDF",
+                    data=pdf_cert.build_certificate_pdf(c, link),
+                    file_name=f"{c['id']}.pdf",
+                    mime="application/pdf",
+                    key=f"pdf_{c['id']}",
+                )
+            except Exception:
+                pass
+            if c.get("status") == "valid" and st.button("Revocar", key=f"r_{c['id']}"):
+                certificates.revoke(c["id"])
+                st.rerun()
+    foot()
+
+elif page == "crypto":
+    nav_bar("Cripto")
+    st.markdown('<h1 class="hero-title">Criptografía</h1>', unsafe_allow_html=True)
+    if st.button("← Inicio", type="secondary"):
+        st.session_state["page"] = "inicio"
+        st.rerun()
+    panel_pubkey()
+    st.write(
+        {
+            "alg": "Ed25519",
+            "fingerprint": crypto.public_key_fingerprint(),
+            "public_key_hex": crypto.public_key_hex(),
+            "app_version": APP_VERSION,
+        }
+    )
+    foot()
