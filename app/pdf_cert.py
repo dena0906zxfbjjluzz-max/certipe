@@ -1,8 +1,9 @@
-"""PDF formal del certificado en horizontal (landscape) + QR."""
+"""PDF profesional del certificado (layout paisajístico tipo extensión académica)."""
 
 from __future__ import annotations
 
 import io
+import math
 import textwrap
 from datetime import datetime
 from typing import Any
@@ -11,11 +12,20 @@ import qrcode
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 
+# Azul institucional (referencia: limpio y legible)
+BLUE = (0.0, 0.62, 0.82)
+INK = (0.08, 0.1, 0.12)
+MUTED = (0.35, 0.4, 0.45)
+SOFT = (0.9, 0.92, 0.94)
+
+
 def qr_png_bytes(url: str, box_size: int = 8) -> bytes:
-    img = qrcode.make(url, border=2, box_size=box_size)
+    img = qrcode.make(url, border=1, box_size=box_size)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -33,20 +43,44 @@ def _fmt_fecha(iso: str | None) -> str:
         ).split()
         return f"{dt.day} de {meses[dt.month - 1]} de {dt.year}"
     except Exception:
-        return iso[:10]
+        return str(iso)[:10]
 
 
-def _wrapped_centered(
+def _waves(c: canvas.Canvas, width: float, height: float) -> None:
+    """Fondo sutil de líneas onduladas (aspecto profesional, no genérico plano)."""
+    c.saveState()
+    c.setStrokeColorRGB(0.88, 0.9, 0.92)
+    c.setLineWidth(0.35)
+    for i in range(18):
+        y0 = 18 * mm + i * 9 * mm
+        path = c.beginPath()
+        path.moveTo(15 * mm, y0)
+        x = 15 * mm
+        while x < width - 15 * mm:
+            path.curveTo(
+                x + 12 * mm,
+                y0 + 3.5 * mm * math.sin(i + x / 40),
+                x + 24 * mm,
+                y0 - 3.5 * mm * math.sin(i + x / 30),
+                x + 36 * mm,
+                y0,
+            )
+            x += 36 * mm
+        c.drawPath(path, stroke=1, fill=0)
+    c.restoreState()
+
+
+def _center_para(
     c: canvas.Canvas,
     text: str,
     y: float,
-    *,
     width: float,
-    max_chars: int = 78,
-    leading: float = 13,
+    *,
     font: str = "Helvetica",
     size: int = 11,
-    color: tuple[float, float, float] = (0.2, 0.22, 0.24),
+    leading: float = 15,
+    max_chars: int = 95,
+    color: tuple[float, float, float] = MUTED,
 ) -> float:
     c.setFont(font, size)
     c.setFillColorRGB(*color)
@@ -57,146 +91,152 @@ def _wrapped_centered(
 
 
 def build_certificate_pdf(cert: dict[str, Any], verify_url: str) -> bytes:
-    """PDF A4 horizontal, estilo certificado formal."""
+    """
+    Layout horizontal profesional:
+    logos/header · CERTIFICADO · Otorgado a · cuerpo · ciudad/fecha · QR + firma · pie.
+    """
     buf = io.BytesIO()
     width, height = landscape(A4)
     c = canvas.Canvas(buf, pagesize=landscape(A4))
 
-    # Fondo + doble marco
+    # Fondo blanco + textura suave
     c.setFillColorRGB(1, 1, 1)
     c.rect(0, 0, width, height, fill=1, stroke=0)
-    c.setStrokeColorRGB(0.12, 0.14, 0.16)
-    c.setLineWidth(1.4)
-    c.rect(10 * mm, 10 * mm, width - 20 * mm, height - 20 * mm, fill=0, stroke=1)
-    c.setStrokeColorRGB(0.0, 0.55, 0.78)
-    c.setLineWidth(0.6)
-    c.rect(12.5 * mm, 12.5 * mm, width - 25 * mm, height - 25 * mm, fill=0, stroke=1)
+    _waves(c, width, height)
 
-    inst = str(cert.get("institution_name") or "Institución")
+    inst = str(cert.get("institution_name") or "Institución").strip()
+    slogan = str(cert.get("institution_slogan") or "Formación con sentido").strip()
+    brand = str(cert.get("brand_short") or "CertiPE").strip()
+    brand_sub = str(cert.get("brand_sub") or "Certificados con firma digital").strip()
 
-    # —— Cabecera izquierda / derecha ——
-    c.setFillColorRGB(0.08, 0.1, 0.12)
-    c.setFont("Helvetica-Bold", 15)
-    c.drawString(20 * mm, height - 24 * mm, "CertiPE")
-    c.setFont("Helvetica", 7.5)
-    c.setFillColorRGB(0.4, 0.45, 0.5)
-    c.drawString(20 * mm, height - 29 * mm, "Certificados con firma digital")
+    # ——— Cabecera tipo CPE | Institución ———
+    # Izquierda: marca corta
+    c.setFillColorRGB(*INK)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawString(22 * mm, height - 26 * mm, brand[:18])
+    c.setFont("Helvetica", 8)
+    c.setFillColorRGB(*MUTED)
+    c.drawString(22 * mm, height - 31 * mm, brand_sub[:48])
 
-    c.setFillColorRGB(0.0, 0.55, 0.78)
-    c.setFont("Helvetica-Bold", 11)
-    c.drawRightString(width - 20 * mm, height - 24 * mm, inst.upper()[:42])
+    # Derecha: nombre de institución (nivel profesional, no se aprieta)
+    c.setFillColorRGB(*BLUE)
+    c.setFont("Helvetica-Bold", 14)
+    # Si el nombre es largo, reducir tamaño
+    max_inst = 42
+    inst_draw = inst.upper()
+    size_inst = 14 if len(inst_draw) <= 28 else (11 if len(inst_draw) <= 40 else 9)
+    c.setFont("Helvetica-Bold", size_inst)
+    c.drawRightString(width - 22 * mm, height - 25 * mm, inst_draw[:max_inst])
     c.setFont("Helvetica", 7)
-    c.setFillColorRGB(0.4, 0.45, 0.5)
-    c.drawRightString(width - 20 * mm, height - 29 * mm, "Documento verificado digitalmente")
+    c.setFillColorRGB(*MUTED)
+    c.drawRightString(width - 22 * mm, height - 30 * mm, slogan[:50].upper())
 
-    # Línea decorativa bajo cabecera
-    c.setStrokeColorRGB(0.85, 0.88, 0.9)
-    c.setLineWidth(0.5)
-    c.line(20 * mm, height - 34 * mm, width - 20 * mm, height - 34 * mm)
+    # ——— Título principal ———
+    c.setFillColorRGB(*BLUE)
+    c.setFont("Helvetica-Bold", 36)
+    c.drawCentredString(width / 2, height - 58 * mm, "CERTIFICADO")
 
-    # —— Título ——
-    c.setFillColorRGB(0.0, 0.55, 0.78)
-    c.setFont("Helvetica-Bold", 30)
-    c.drawCentredString(width / 2, height - 52 * mm, "CERTIFICADO")
+    # ——— Otorgado a ———
+    c.setFillColorRGB(*MUTED)
+    c.setFont("Helvetica", 12)
+    c.drawCentredString(width / 2, height - 74 * mm, "Otorgado a:")
 
-    c.setFillColorRGB(0.3, 0.33, 0.36)
-    c.setFont("Helvetica", 11)
-    c.drawCentredString(width / 2, height - 64 * mm, "Otorgado a:")
+    name = str(cert.get("holder_name") or "—").strip()
+    c.setFillColorRGB(*INK)
+    name_size = 20 if len(name) < 36 else (16 if len(name) < 50 else 13)
+    c.setFont("Helvetica-Bold", name_size)
+    c.drawCentredString(width / 2, height - 86 * mm, name)
 
-    name = str(cert.get("holder_name") or "—")
-    c.setFillColorRGB(0.05, 0.07, 0.09)
-    c.setFont("Helvetica-Bold", 20)
-    c.drawCentredString(width / 2, height - 75 * mm, name)
-
-    c.setStrokeColorRGB(0.75, 0.8, 0.85)
-    c.setLineWidth(0.6)
-    c.line(width / 2 - 70 * mm, height - 79 * mm, width / 2 + 70 * mm, height - 79 * mm)
-
-    course = str(cert.get("course_title") or "—")
+    # ——— Cuerpo del texto (centro, como el modelo profesional) ———
+    course = str(cert.get("course_title") or "—").strip()
     hours = cert.get("course_hours")
-    grade = cert.get("grade")
+    grade = (cert.get("grade") or "").strip()
     notes = (cert.get("notes") or "").strip()
+    city = (cert.get("city") or "Perú").strip()
     fecha = _fmt_fecha(cert.get("issued_at"))
-    city = str(cert.get("city") or "Perú")
     doc = str(cert.get("holder_doc") or "—")
+    role = (cert.get("signer_role") or "Director académico").strip()
+    firmante = str(cert.get("issued_by") or inst).strip()
 
-    y = height - 92 * mm
+    y = height - 104 * mm
+
     if grade:
-        body = f"Por haber aprobado con una nota de {grade} el curso / programa: {course}."
+        intro = f"Por haber aprobado con una nota de {grade} el curso / programa:"
     else:
-        body = f"Por haber culminado satisfactoriamente el curso / programa: {course}."
+        intro = "Por haber culminado satisfactoriamente el curso / programa:"
 
-    y = _wrapped_centered(c, body, y, width=width, max_chars=90, leading=14, size=11)
+    y = _center_para(c, intro, y, width, size=11, leading=14, color=MUTED, max_chars=100)
 
-    c.setFont("Helvetica", 10)
-    c.setFillColorRGB(0.35, 0.4, 0.45)
-    c.drawCentredString(width / 2, y, f"Documento de identidad: {doc}")
-    y -= 14
+    # Nombre del curso en negrita (más jerárquico)
+    c.setFont("Helvetica-Bold", 13 if len(course) < 50 else 11)
+    c.setFillColorRGB(*INK)
+    for line in textwrap.wrap(course, width=70) or [course]:
+        c.drawCentredString(width / 2, y, line)
+        y -= 15
+    y -= 4
 
-    if hours:
-        y = _wrapped_centered(
-            c,
-            f"Con una duración de {hours} horas académicas.",
-            y,
-            width=width,
-            max_chars=90,
-            leading=13,
-            size=11,
-        )
-
+    # Rango de fechas / detalle (notas) + horas en un solo bloque limpio
+    detail_parts: list[str] = []
     if notes:
-        y = _wrapped_centered(
-            c,
-            notes,
-            y,
-            width=width,
-            max_chars=90,
-            leading=12,
-            size=10,
-            color=(0.4, 0.45, 0.5),
-        )
+        detail_parts.append(notes.rstrip("."))
+    if hours:
+        detail_parts.append(f"con una duración de {hours} horas")
+    if detail_parts:
+        detail = " ".join(detail_parts)
+        if not detail[0].isupper():
+            detail = detail[0].upper() + detail[1:]
+        if not detail.endswith("."):
+            detail += "."
+        y = _center_para(c, detail, y, width, size=11, leading=14, color=MUTED, max_chars=100)
+
+    y = _center_para(
+        c,
+        f"Documento de identidad: {doc}",
+        y - 2,
+        width,
+        size=9,
+        leading=12,
+        color=MUTED,
+        max_chars=100,
+    )
 
     if fecha:
         c.setFont("Helvetica", 11)
-        c.setFillColorRGB(0.2, 0.22, 0.24)
-        c.drawCentredString(width / 2, y - 4, f"{city}, {fecha}")
+        c.setFillColorRGB(*INK)
+        c.drawCentredString(width / 2, y - 6, f"{city}, {fecha}")
 
-    # —— Pie: QR izquierda · firma derecha ——
-    qr_bytes = qr_png_bytes(verify_url, box_size=5)
-    qr_img = ImageReader(io.BytesIO(qr_bytes))
-    qr_size = 30 * mm
-    qx, qy = 22 * mm, 28 * mm
-    c.drawImage(qr_img, qx, qy, width=qr_size, height=qr_size, mask="auto")
-    c.setFont("Helvetica", 7)
-    c.setFillColorRGB(0.35, 0.4, 0.45)
-    c.drawCentredString(qx + qr_size / 2, qy - 4 * mm, "Escanea para validar")
-
-    # Zona firma centrada-derecha
-    sig_cx = width * 0.72
-    c.setStrokeColorRGB(0.15, 0.18, 0.2)
-    c.setLineWidth(0.8)
-    c.line(sig_cx - 40 * mm, 42 * mm, sig_cx + 40 * mm, 42 * mm)
-    firmante = str(cert.get("issued_by") or inst)
-    c.setFont("Helvetica-Bold", 10)
-    c.setFillColorRGB(0.08, 0.1, 0.12)
-    c.drawCentredString(sig_cx, 36 * mm, firmante[:52])
-    c.setFont("Helvetica", 8)
-    c.setFillColorRGB(0.4, 0.45, 0.5)
-    c.drawCentredString(sig_cx, 31 * mm, "Responsable de emisión")
-
-    # Barra inferior
-    c.setFillColorRGB(0.08, 0.1, 0.12)
-    c.rect(10 * mm, 10 * mm, width - 20 * mm, 12 * mm, fill=1, stroke=0)
-    c.setFillColorRGB(0.95, 0.96, 0.97)
-    c.setFont("Helvetica", 6.5)
-    code = str(cert.get("id") or "")
-    c.drawString(14 * mm, 14 * mm, f"Código: {code}  ·  Validar: {verify_url[:80]}")
-    hash_s = str(cert.get("payload_hash") or "")
-    c.drawRightString(
-        width - 14 * mm,
-        14 * mm,
-        f"Ed25519 · {hash_s[:18]}…" if len(hash_s) > 18 else f"Ed25519 · {hash_s}",
+    # ——— QR (izq) · Firma centrada (como TECSUP) ———
+    qr_size = 28 * mm
+    qx, qy = 24 * mm, 26 * mm
+    c.drawImage(
+        ImageReader(io.BytesIO(qr_png_bytes(verify_url, box_size=5))),
+        qx,
+        qy,
+        width=qr_size,
+        height=qr_size,
+        mask="auto",
     )
+
+    # Firma al centro inferior
+    sig_cx = width / 2 + 8 * mm
+    c.setStrokeColorRGB(*INK)
+    c.setLineWidth(0.8)
+    c.line(sig_cx - 42 * mm, 40 * mm, sig_cx + 42 * mm, 40 * mm)
+
+    c.setFont("Helvetica-Bold", 10)
+    c.setFillColorRGB(*INK)
+    c.drawCentredString(sig_cx, 33 * mm, firmante[:56])
+    c.setFont("Helvetica", 8)
+    c.setFillColorRGB(*MUTED)
+    c.drawCentredString(sig_cx, 28 * mm, role[:56])
+
+    # ——— Pie legal / validación ———
+    c.setFont("Helvetica", 6.5)
+    c.setFillColorRGB(*MUTED)
+    c.drawCentredString(width / 2, 18 * mm, verify_url[:110])
+    c.setFont("Helvetica", 6)
+    legal = f"{inst}  ·  Código {cert.get('id', '')}  ·  Firma digital Ed25519"
+    c.drawCentredString(width / 2, 13.5 * mm, legal[:120])
 
     c.showPage()
     c.save()
