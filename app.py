@@ -680,7 +680,9 @@ elif page == "emitir":
         """,
         unsafe_allow_html=True,
     )
-    with st.form("emitir"):
+    # Tras un emit exitoso se incrementa el contador → form nuevo vacío
+    form_id = st.session_state.get("emit_form_id", 0)
+    with st.form(f"emitir_{form_id}", clear_on_submit=True):
         holder_name = st.text_input(
             "Nombre del titulado",
             placeholder="Denilson Aurely Padilla Arevalo",
@@ -689,7 +691,7 @@ elif page == "emitir":
         course_title = st.text_input("Curso / programa", placeholder="Power Bi desde cero")
         c1, c2 = st.columns(2)
         with c1:
-            course_hours = st.number_input("Horas", min_value=0, max_value=10000, value=32)
+            course_hours = st.number_input("Horas", min_value=0, max_value=10000, value=0)
             grade = st.text_input("Nota (opcional)", placeholder="16 (Dieciséis)")
             city = st.text_input("Ciudad", placeholder="Trujillo")
         with c2:
@@ -719,11 +721,13 @@ elif page == "emitir":
                 st.session_state["supabase_ok"] = False
                 st.session_state["supabase_error"] = None
                 try:
-                    # Después de firma Ed25519 + hash SHA-256 → Supabase
                     guardar_certificado_supabase(rec)
                     st.session_state["supabase_ok"] = True
                 except Exception as e:  # noqa: BLE001
                     st.session_state["supabase_error"] = str(e)
+                # Vaciar formulario para el siguiente certificado
+                st.session_state["emit_form_id"] = form_id + 1
+                st.rerun()
 
     if st.button("← Inicio", type="secondary"):
         st.session_state["page"] = "inicio"
